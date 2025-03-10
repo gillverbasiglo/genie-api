@@ -7,7 +7,6 @@ requires-python = ">=3.9"
 dependencies = [
     "boto3>=1.37.8",
     "fastapi[standard]>=0.115.11",
-    "google-genai>=1.4.0",
     "openai>=1.65.4",
     "pydantic-settings>=2.8.1",
     "python-dotenv>=1.0.1",
