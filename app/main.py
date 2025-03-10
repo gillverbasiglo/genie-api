@@ -6,7 +6,10 @@ from app.config import Settings
 
 app = FastAPI()
 
-settings = Settings()
+client = OpenAI(
+    base_url="https://api.groq.com/openai/v1",
+    api_key=Settings().groq_api_key
+)
 
 class TextRequest(BaseModel):
     text: str
@@ -28,11 +31,6 @@ async def process_text(
         HTTPException: When API authentication fails or service is unavailable
     """
     try:
-        client = OpenAI(
-            base_url="https://api.groq.com/openai/v1",
-            api_key=settings.groq_api_key
-        )
-        
         response = client.chat.completions.create(
             model="llama-3.1-8b-instant",
             messages=[
