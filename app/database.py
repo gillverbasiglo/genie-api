@@ -1,9 +1,10 @@
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
+from .config import Settings
 
 # PostgreSQL connection string
-SQLALCHEMY_DATABASE_URL = "postgresql+asyncpg://username:password@localhost/genie_db"
+SQLALCHEMY_DATABASE_URL = Settings().database_url
 
 engine = create_engine(SQLALCHEMY_DATABASE_URL)
 

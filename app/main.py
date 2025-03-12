@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from .database import engine, Base
 from app.config import Settings
 from sqlalchemy.orm import Session
-from .models import InvitationCode
+from .models import InviteCodeCreate, InvitationCode
 
 app = FastAPI()
 security = HTTPBearer()
@@ -108,6 +108,25 @@ async def validate_code(code: str, db: Session = Depends(get_db)):
     if not db_code.is_active:
         raise HTTPException(status_code=400, detail="Invite Code is not active")
     return {"message": "Invite Code is valid"}
+
+@app.post("/create-invite-code/")
+def create_invite_code(invite_code: InviteCodeCreate, db: Session = Depends(get_db)):
+    # Check if code already exists
+    db_code = db.query(InvitationCode).filter(InvitationCode.code == invite_code.code).first()
+    if db_code:
+        raise HTTPException(status_code=400, detail="Invitation code already exists")
+
+    new_code = models.InvitationCode(
+        code=invite_code.code,
+        expires_at=invite_code.expires_at,
+        is_active=invite_code.is_active
+    )
+
+    db.add(new_code)
+    db.commit()
+    db.refresh(new_code)
+
+    return {"message": "Invitation code created successfully", "code": new_code.code}
 
 @app.post("/process-text", response_model=dict[str, str])
 async def process_text(
