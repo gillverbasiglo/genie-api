@@ -7,8 +7,10 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import jwt
 from openai import OpenAI, OpenAIError
 from pydantic import BaseModel
-
+from .database import engine, Base
 from app.config import Settings
+from sqlalchemy.orm import Session
+from .models import InvitationCode
 
 app = FastAPI()
 security = HTTPBearer()
@@ -21,6 +23,17 @@ USER_POOL_ID = "us-east-1_123456789"
 
 # Cache the JWKS for 1 hour to avoid fetching it on every request
 cache = TTLCache(maxsize=1, ttl=3600)
+
+async def create_tables():
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 @cached(cache)
 def get_jwks():
@@ -82,6 +95,19 @@ client = OpenAI(
 
 class TextRequest(BaseModel):
     text: str
+
+@app.post("/validate-code/")
+async def validate_code(code: str, db: Session = Depends(get_db)):
+    db_code = db.query(InvitationCode).filter(InvitationCode.code == code).first()
+    if not db_code:
+        raise HTTPException(status_code=404, detail="Invite Code not found")
+    if db_code.used_by:
+        raise HTTPException(status_code=400, detail="Invite Code is already used")
+    if db_code.expires_at and db_code.expires_at < datetime.utcnow():
+        raise HTTPException(status_code=400, detail="Invite Code has expired")
+    if not db_code.is_active:
+        raise HTTPException(status_code=400, detail="Invite Code is not active")
+    return {"message": "Invite Code is valid"}
 
 @app.post("/process-text", response_model=dict[str, str])
 async def process_text(
