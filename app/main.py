@@ -1,5 +1,6 @@
 import requests
 import json
+import firebase_admin
 
 from cachetools import cached, TTLCache
 from fastapi import FastAPI, Depends, HTTPException, status
@@ -7,13 +8,19 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import jwt
 from openai import OpenAI, OpenAIError
 from pydantic import BaseModel
+
+from secrets_manager import SecretsManager
+
 from .database import engine, Base
-from app.config import Settings
+from config import Settings
 from sqlalchemy.orm import Session
 from .models import InviteCodeCreate, InvitationCode
 
 app = FastAPI()
 security = HTTPBearer()
+
+settings = Settings()
+secrets = SecretsManager(region_name=settings.aws_region)
 
 # Configure Cognito settings
 CLIENT_ID = "3jrpf1q7jiguprenuqam7tpkf5"
@@ -90,7 +97,7 @@ async def validate_token(credentials: HTTPAuthorizationCredentials = Depends(sec
 
 client = OpenAI(
     base_url="https://api.groq.com/openai/v1",
-    api_key=Settings().groq_api_key
+    api_key=settings.groq_api_key
 )
 
 class TextRequest(BaseModel):
