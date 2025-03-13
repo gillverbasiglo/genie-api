@@ -1,5 +1,5 @@
 from sqlalchemy import Column, Integer, String, Boolean, TIMESTAMP
-from .database import Base
+from database import Base
 
 class InvitationCode(Base):
     __tablename__ = "invitation_codes"
