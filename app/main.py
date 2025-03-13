@@ -14,10 +14,10 @@ app = FastAPI()
 security = HTTPBearer()
 
 # Configure Cognito settings
-CLIENT_ID = "1234567890"
+CLIENT_ID = "3jrpf1q7jiguprenuqam7tpkf5"
 COGNITO_JWKS_URL = f"https://cognito-idp.{REGION}.amazonaws.com/{USER_POOL_ID}/.well-known/jwks.json"
 REGION = "us-east-1"
-USER_POOL_ID = "us-east-1_123456789"
+USER_POOL_ID = "us-east-1_fhyOsjWSR"
 
 # Cache the JWKS for 1 hour to avoid fetching it on every request
 cache = TTLCache(maxsize=1, ttl=3600)
