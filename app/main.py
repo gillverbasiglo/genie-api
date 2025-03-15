@@ -10,10 +10,10 @@ from jose import jwt
 from openai import OpenAI, OpenAIError
 from pydantic import BaseModel
 
-from secrets_manager import SecretsManager
+from .secrets_manager import SecretsManager
 
 from .database import engine, Base
-from config import Settings
+from .config import Settings
 from sqlalchemy.orm import Session
 from .models import InviteCodeCreate, InvitationCode
 
