@@ -5,6 +5,7 @@ import firebase_admin
 from cachetools import cached, TTLCache
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from firebase_admin import credentials, auth
 from jose import jwt
 from openai import OpenAI, OpenAIError
 from pydantic import BaseModel
@@ -22,12 +23,6 @@ security = HTTPBearer()
 settings = Settings()
 secrets = SecretsManager(region_name=settings.aws_region)
 
-# Configure Cognito settings
-CLIENT_ID = "3jrpf1q7jiguprenuqam7tpkf5"
-COGNITO_JWKS_URL = f"https://cognito-idp.{REGION}.amazonaws.com/{USER_POOL_ID}/.well-known/jwks.json"
-REGION = "us-east-1"
-USER_POOL_ID = "us-east-1_fhyOsjWSR"
-
 # Cache the JWKS for 1 hour to avoid fetching it on every request
 cache = TTLCache(maxsize=1, ttl=3600)
 
@@ -42,63 +37,47 @@ def get_db():
     finally:
         db.close()
 
-@cached(cache)
-def get_jwks():
-    return requests.get(COGNITO_JWKS_URL).json()
-
-async def validate_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    token = credentials.credentials
-
-    # Get the Key ID from the token header
+# Initialize Firebase app using credentials from Secrets Manager
+def initialize_firebase():
     try:
-        payload = jwt.get_unverified_header(token)
-        kid = payload.get("kid")
-    except jwt.JWTError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token"
-        )
+        cred_path = secrets.get_firebase_credentials_file()
+        cred = credentials.Certificate(cred_path)
+        firebase_app = firebase_admin.initialize_app(cred)
+        return firebase_app
+    except Exception as e:
+        print(f"Firebase initialization error: {e}")
+        raise
 
-    # Get the JWKS from the Cognito JWKS URL
-    jwks = get_jwks()
-    key = None
-
-    # Find the correct key from the JWKS
-    for key in jwks["keys"]:
-        if key["kid"] == kid:
-            key = jwk
-            break
-
-    if key is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token"
-        )
-
-    # Construct the public key
-    public_key = jwt.algorithms.RSAAlgorithm.from_jwk(json.dumps(key))
-
-    # Decode the token
-    try:
-        payload = jwt.decode(
-            token,
-            public_key,
-            algorithms=["RS256"],
-            audience=CLIENT_ID,
-            issuer=COGNITO_JWKS_URL
-        )
-
-        return payload
-    except jwt.JWTError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token"
-        )
+# Initialize Firebase
+firebase_app = initialize_firebase()
 
 client = OpenAI(
     base_url="https://api.groq.com/openai/v1",
     api_key=settings.groq_api_key
 )
+
+# Dependency to get current user from token
+async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    token = credentials.credentials
+    try:
+        # Verify token with Firebase Admin SDK
+        decoded_token = auth.verify_id_token(token)
+        return decoded_token
+    except auth.ExpiredIdTokenError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Firebase ID token has expired. Get a fresh token from your client app and try again."
+        )
+    except auth.InvalidIdTokenError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Firebase ID token is invalid. Get a fresh token from your client app and try again."
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Invalid authentication token: {str(e)}"
+        )
 
 class TextRequest(BaseModel):
     text: str
@@ -181,4 +160,22 @@ async def process_text(
         raise HTTPException(
             status_code=500,
             detail=f"Unexpected error: {str(e)}"
+        )
+
+@app.get("/protected-route")
+async def protected_route(current_user: dict = Depends(get_current_user)):
+    try:
+        # Get additional user information from Firebase
+        user = auth.get_user(current_user["uid"])
+        return {
+            "uid": user.uid,
+            "phone_number": user.phone_number,
+            "provider_id": "phone",
+            "display_name": user.display_name,
+            "email": user.email
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving user details: {str(e)}"
         )
