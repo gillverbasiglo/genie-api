@@ -9,6 +9,7 @@ dependencies = [
     "boto3>=1.37.8",
     "fastapi[standard]>=0.115.11",
     "firebase-admin>=6.7.0",
+    "gunicorn>=23.0.0",
     "openai>=1.65.4",
     "pydantic>=2.10.6",
     "pydantic-settings>=2.8.1",
