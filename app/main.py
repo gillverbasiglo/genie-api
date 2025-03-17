@@ -1,11 +1,12 @@
 import requests
 import json
 import firebase_admin
+import logging
 
 from cachetools import cached, TTLCache
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from firebase_admin import credentials, auth
+from firebase_admin import initialize_app, credentials, auth
 from jose import jwt
 from openai import OpenAI, OpenAIError
 from pydantic import BaseModel
@@ -15,10 +16,14 @@ from .secrets_manager import SecretsManager
 from .database import engine, Base
 from .config import Settings
 from sqlalchemy.orm import Session
-from .models import InviteCodeCreate, InvitationCode
+from .models import InvitationCode, InviteCodeCreate
+from .identity_credentials import WorkloadIdentityCredentials
 
 app = FastAPI()
+logger = logging.getLogger(__name__)
 security = HTTPBearer()
+# Initialize Firebase
+firebase_app = None
 
 settings = Settings()
 secrets = SecretsManager(region_name=settings.aws_region)
@@ -37,43 +42,54 @@ def get_db():
     finally:
         db.close()
 
-# Initialize Firebase app using credentials from Secrets Manager
-def initialize_firebase():
-    try:
-        cred_path = secrets.get_firebase_credentials_file()
-        cred = credentials.Certificate(cred_path)
-        firebase_app = firebase_admin.initialize_app(cred)
-        return firebase_app
-    except Exception as e:
-        print(f"Firebase initialization error: {e}")
-        raise
-
-# Initialize Firebase
-firebase_app = initialize_firebase()
-
 client = OpenAI(
     base_url="https://api.groq.com/openai/v1",
     api_key=settings.groq_api_key
 )
 
+# Initialize Firebase app
+@app.on_event("startup")
+async def startup_event():
+    global firebase_app
+    try:
+        # Initialize with workload identity credentials
+        workload_creds = WorkloadIdentityCredentials()
+        firebase_app = initialize_app(
+            credential=workload_creds,
+            options={
+                'projectId': 'genia-ai-19a34'
+            }
+        )
+        print("Firebase initialized successfully")
+    except Exception as e:
+        print(f"Error initializing Firebase: {e}")
+        raise e
+
 # Dependency to get current user from token
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
     token = credentials.credentials
+    logger.info(f"Token is: {token}")
     try:
+        logger.info(f"Verifying Firebase ID token: {token}")
         # Verify token with Firebase Admin SDK
         decoded_token = auth.verify_id_token(token)
+        logger.info(f"Decoded token: {decoded_token}")
         return decoded_token
     except auth.ExpiredIdTokenError:
+        logger.error("Firebase ID token has expired. Get a fresh token from your client app and try again.")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Firebase ID token has expired. Get a fresh token from your client app and try again."
         )
     except auth.InvalidIdTokenError:
+        logger.error("Firebase ID token is invalid. Get a fresh token from your client app and try again.")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Firebase ID token is invalid. Get a fresh token from your client app and try again."
         )
     except Exception as e:
+        print(e)
+        logger.error(f"Error verifying Firebase ID token: {e}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=f"Invalid authentication token: {str(e)}"
