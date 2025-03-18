@@ -71,23 +71,6 @@ class SecretsManager:
         """
         value = self.get_secret(secret_id)
         return json.loads(value)
-
-    def get_firebase_credentials(self) -> Dict[str, Any]:
-        """Get Firebase credentials from Secrets Manager"""
-        return self.get_json_secret('firebase-credentials')
-    
-    def get_firebase_credentials_file(self) -> str:
-        """
-        Get Firebase credentials and save to a temporary file.
-        
-        Returns:
-            Path to the temporary file
-        """
-        creds = self.get_firebase_credentials()
-        fd, path = tempfile.mkstemp(suffix='.json')
-        with os.fdopen(fd, 'w') as tmp:
-            json.dump(creds, tmp)
-        return path
     
     def get_db_credentials(self) -> Dict[str, str]:
         """
@@ -95,7 +78,7 @@ class SecretsManager:
         For RDS instances, the secret is automatically formatted to include
         username, password, host, port, dbname, etc.
         """
-        return self.get_json_secret('postgresql-credentials')
+        return self.get_json_secret(os.environ.get('DATABASE_SECRETS_NAME', 'rds!db-3805dfcb-d481-41ee-9f16-1b6fb710913e'))
     
     def get_api_key(self, service_name: str) -> str:
         """Get API key for a specific service"""

@@ -15,7 +15,7 @@ from pydantic import BaseModel
 
 from .secrets_manager import SecretsManager
 
-from .database import engine, Base
+from .database import engine, Base, SessionLocal
 from .config import Settings
 from sqlalchemy.orm import Session
 from .models import InvitationCode, InviteCodeCreate
@@ -46,7 +46,7 @@ def get_db():
 
 client = OpenAI(
     base_url="https://api.groq.com/openai/v1",
-    api_key=settings.groq_api_key
+    api_key=secrets.get_api_key("groq")
 )
 
 @app.on_event("startup")
