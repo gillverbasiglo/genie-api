@@ -2,6 +2,8 @@ import requests
 import json
 import firebase_admin
 import logging
+import google.auth
+import os
 
 from cachetools import cached, TTLCache
 from fastapi import FastAPI, Depends, HTTPException, status
@@ -47,49 +49,40 @@ client = OpenAI(
     api_key=settings.groq_api_key
 )
 
-# Initialize Firebase app
 @app.on_event("startup")
 async def startup_event():
     global firebase_app
     try:
-        # Initialize with workload identity credentials
-        workload_creds = WorkloadIdentityCredentials()
+        # Import Firebase credentials
+        from firebase_admin import credentials as fb_credentials
+        
+        # Create a credential object
+        cred = fb_credentials.ApplicationDefault()
+        
+        # Initialize Firebase with explicit credentials
         firebase_app = initialize_app(
-            credential=workload_creds,
+            credential=cred,
             options={
                 'projectId': 'genia-ai-19a34'
             }
         )
-        print("Firebase initialized successfully")
+        logger.info("Firebase initialized successfully")
     except Exception as e:
-        print(f"Error initializing Firebase: {e}")
+        logger.exception(f"Error initializing Firebase")
         raise e
 
 # Dependency to get current user from token
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
     token = credentials.credentials
-    logger.info(f"Token is: {token}")
+    logger.info(f"Verifying token: {token[:10]}...{token[-10:]} (truncated for security)")
     try:
-        logger.info(f"Verifying Firebase ID token: {token}")
-        # Verify token with Firebase Admin SDK
+        # Add more detailed debugging
+        logger.debug("About to verify Firebase ID token")
         decoded_token = auth.verify_id_token(token)
-        logger.info(f"Decoded token: {decoded_token}")
+        logger.info(f"Successfully decoded token with UID: {decoded_token.get('uid')}")
         return decoded_token
-    except auth.ExpiredIdTokenError:
-        logger.error("Firebase ID token has expired. Get a fresh token from your client app and try again.")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Firebase ID token has expired. Get a fresh token from your client app and try again."
-        )
-    except auth.InvalidIdTokenError:
-        logger.error("Firebase ID token is invalid. Get a fresh token from your client app and try again.")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Firebase ID token is invalid. Get a fresh token from your client app and try again."
-        )
     except Exception as e:
-        print(e)
-        logger.error(f"Error verifying Firebase ID token: {e}")
+        logger.exception(f"Detailed error verifying Firebase ID token: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=f"Invalid authentication token: {str(e)}"
