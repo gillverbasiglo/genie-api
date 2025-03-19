@@ -111,7 +111,7 @@ def create_invite_code(invite_code: InviteCodeCreate, db: Session = Depends(get_
     if db_code:
         raise HTTPException(status_code=400, detail="Invitation code already exists")
 
-    new_code = models.InvitationCode(
+    new_code = InvitationCode(
         code=invite_code.code,
         expires_at=invite_code.expires_at,
         is_active=invite_code.is_active
