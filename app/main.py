@@ -12,6 +12,7 @@ from firebase_admin import initialize_app, credentials, auth
 from jose import jwt
 from openai import OpenAI, OpenAIError
 from pydantic import BaseModel
+from datetime import datetime
 
 from .secrets_manager import SecretsManager
 
