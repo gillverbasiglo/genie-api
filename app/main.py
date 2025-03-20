@@ -6,6 +6,7 @@ import google.auth
 import os
 
 from cachetools import cached, TTLCache
+from tripadvisor_endpoints import router as tripadvisor_endpoints
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from firebase_admin import initialize_app, credentials, auth
@@ -33,6 +34,10 @@ secrets = SecretsManager(region_name=settings.aws_region)
 
 # Cache the JWKS for 1 hour to avoid fetching it on every request
 cache = TTLCache(maxsize=1, ttl=3600)
+
+
+# Include the TripAdvisor router
+app.include_router(tripadvisor_endpoints)
 
 async def create_tables():
     async with engine.begin() as conn:
