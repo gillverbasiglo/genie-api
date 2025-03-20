@@ -25,11 +25,11 @@ router = APIRouter(prefix="/tripadvisor", tags=["tripadvisor"])
 settings = Settings()
 secrets = SecretsManager(region_name=settings.aws_region)
 
-# Get API key from environment variables
+# Get API key from AWS Secrets Manager like we did in the main.py file for groq
 API_KEY = secrets.get_api_key("tripAdvisor")
 BASE_URL = "https://api.content.tripadvisor.com/api/v1"
 
-# Enum definitions that mirror our Swift enums
+# Enum definitions
 class LocationCategory(str, Enum):
     hotels = "hotels"
     attractions = "attractions"
@@ -41,7 +41,7 @@ class RadiusUnit(str, Enum):
     miles = "mi"
     meters = "m"
 
-# Models for response validation
+# Models for API response validation
 class Location(BaseModel):
     location_id: str = Field(..., alias="location_id")
     name: str
@@ -68,7 +68,7 @@ class TravelPhotosResponse(BaseModel):
 
 # HTTP client for making API requests
 async def get_client():
-    return httpx.AsyncClient(timeout=30.0)
+    return httpx.AsyncClient(timeout=20.0)
 
 # Endpoint for location search
 @router.get("/location/search", response_model=TravelSearchResponse)
@@ -189,7 +189,7 @@ async def get_location_photos(
             logger.error(f"Failed to decode location photos: {str(e)}")
             raise HTTPException(status_code=500, detail=f"Error processing response: {str(e)}")
 
-# Convenience endpoints that mirror our Swift extensions
+# Convenience endpoints
 @router.get("/hotels/{location}", response_model=TravelSearchResponse)
 async def search_hotels(location: str):
     return await search_locations(search_query=location, category=LocationCategory.hotels)
