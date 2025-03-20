@@ -18,8 +18,7 @@ logger = logging.getLogger(__name__)
 # Create router
 router = APIRouter(prefix="/places", tags=["places"])
 
-# API configuration
-# Using hardcoded key as in the Swift code, but you should move this to an environment variable
+# API configuration for testing purposes
 API_KEY = os.getenv("GOOGLE_PLACES_API_KEY", "AIzaSyBvCs3qRElCb82VSo6rYBwLCDQ7xPP8Pm8")
 BASE_URL = "https://maps.googleapis.com/maps/api/place"
 
@@ -71,14 +70,14 @@ class PlaceDetailsResponse(BaseModel):
 async def get_client():
     return httpx.AsyncClient(timeout=30.0)
 
-# Endpoint for restaurant search
-@router.get("/restaurants/search", response_model=PlaceSearchResponse)
-async def search_restaurants(query: str, location: str):
-    logger.info(f"Searching restaurants with query: '{query}' in location: '{location}'")
+# Endpoint for places search
+@router.get("/search", response_model=PlaceSearchResponse)
+async def search_places(query: str, place_type: str, location: str):
+    logger.info(f"Searching places with query: '{query}' in location: '{location}'")
     
     params = {
         "key": API_KEY,
-        "input": f"{query} restaurants in {location}",
+        "input": f"{query} {place_type} in {location}",
         "inputtype": "textquery",
         "fields": "place_id,name,geometry"
     }
@@ -104,9 +103,9 @@ async def search_restaurants(query: str, location: str):
             logger.error(f"Request error: {str(e)}")
             raise HTTPException(status_code=500, detail=f"Request error: {str(e)}")
 
-# Endpoint for restaurant details
-@router.get("/restaurants/details/{place_id}", response_model=PlaceDetailsResponse)
-async def get_restaurant_details(place_id: str):
+# Endpoint for places details
+@router.get("/details/{place_id}", response_model=PlaceDetailsResponse)
+async def get_place_details(place_id: str):
     logger.debug(f"Fetching details for place ID: {place_id}")
     
     params = {
@@ -139,9 +138,10 @@ async def get_restaurant_details(place_id: str):
             logger.error(f"Request error: {str(e)}")
             raise HTTPException(status_code=500, detail=f"Request error: {str(e)}")
 
-# Endpoint for raw restaurant details response (similar to getRestaurantDetailsResponse in Swift)
-@router.get("/restaurants/raw-details/{place_id}")
-async def get_restaurant_details_raw(place_id: str):
+# Endpoint for raw place details response. 
+# I don't understand purpose of this call but we had this API call defined in Swift Places Service inside EventSearch Pakcage 
+@router.get("/raw-details/{place_id}")
+async def get_place_details_raw(place_id: str):
     logger.debug(f"Fetching raw details for place ID: {place_id}")
     
     params = {
