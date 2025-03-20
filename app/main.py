@@ -6,7 +6,6 @@ import google.auth
 import os
 
 from cachetools import cached, TTLCache
-from tripadvisor_endpoints import router as tripadvisor_endpoints
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from firebase_admin import initialize_app, credentials, auth
@@ -20,6 +19,7 @@ from .secrets_manager import SecretsManager
 from .database import engine, Base, SessionLocal
 from .config import Settings
 from sqlalchemy.orm import Session
+from .tripadvisor_endpoints import router as tripadvisor_endpoints
 from .models import InvitationCode, InviteCodeCreate
 from .identity_credentials import WorkloadIdentityCredentials
 
