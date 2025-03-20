@@ -20,6 +20,7 @@ from .secrets_manager import SecretsManager
 from .database import engine, Base, SessionLocal
 from .config import Settings
 from sqlalchemy.orm import Session
+from .tripadvisor_endpoints import router as tripadvisor_endpoints
 from .models import InvitationCode, InviteCodeCreate
 from .identity_credentials import WorkloadIdentityCredentials
 
@@ -34,6 +35,10 @@ secrets = SecretsManager(region_name=settings.aws_region)
 
 # Cache the JWKS for 1 hour to avoid fetching it on every request
 cache = TTLCache(maxsize=1, ttl=3600)
+
+
+# Include the TripAdvisor router
+app.include_router(tripadvisor_endpoints)
 
 async def create_tables():
     async with engine.begin() as conn:
