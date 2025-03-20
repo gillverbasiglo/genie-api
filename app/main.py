@@ -1,25 +1,35 @@
 import requests
 import json
+import firebase_admin
+import logging
+import google.auth
+import os
 
 from cachetools import cached, TTLCache
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from firebase_admin import initialize_app, credentials, auth
 from jose import jwt
 from openai import OpenAI, OpenAIError
 from pydantic import BaseModel
-from .database import engine, Base
-from app.config import Settings
+from datetime import datetime
+
+from .secrets_manager import SecretsManager
+
+from .database import engine, Base, SessionLocal
+from .config import Settings
 from sqlalchemy.orm import Session
-from .models import InviteCodeCreate, InvitationCode
+from .models import InvitationCode, InviteCodeCreate
+from .identity_credentials import WorkloadIdentityCredentials
 
 app = FastAPI()
+logger = logging.getLogger(__name__)
 security = HTTPBearer()
+# Initialize Firebase
+firebase_app = None
 
-# Configure Cognito settings
-CLIENT_ID = "3jrpf1q7jiguprenuqam7tpkf5"
-COGNITO_JWKS_URL = f"https://cognito-idp.{REGION}.amazonaws.com/{USER_POOL_ID}/.well-known/jwks.json"
-REGION = "us-east-1"
-USER_POOL_ID = "us-east-1_fhyOsjWSR"
+settings = Settings()
+secrets = SecretsManager(region_name=settings.aws_region)
 
 # Cache the JWKS for 1 hour to avoid fetching it on every request
 cache = TTLCache(maxsize=1, ttl=3600)
@@ -35,63 +45,49 @@ def get_db():
     finally:
         db.close()
 
-@cached(cache)
-def get_jwks():
-    return requests.get(COGNITO_JWKS_URL).json()
-
-async def validate_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    token = credentials.credentials
-
-    # Get the Key ID from the token header
-    try:
-        payload = jwt.get_unverified_header(token)
-        kid = payload.get("kid")
-    except jwt.JWTError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token"
-        )
-
-    # Get the JWKS from the Cognito JWKS URL
-    jwks = get_jwks()
-    key = None
-
-    # Find the correct key from the JWKS
-    for key in jwks["keys"]:
-        if key["kid"] == kid:
-            key = jwk
-            break
-
-    if key is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token"
-        )
-
-    # Construct the public key
-    public_key = jwt.algorithms.RSAAlgorithm.from_jwk(json.dumps(key))
-
-    # Decode the token
-    try:
-        payload = jwt.decode(
-            token,
-            public_key,
-            algorithms=["RS256"],
-            audience=CLIENT_ID,
-            issuer=COGNITO_JWKS_URL
-        )
-
-        return payload
-    except jwt.JWTError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token"
-        )
-
 client = OpenAI(
     base_url="https://api.groq.com/openai/v1",
-    api_key=Settings().groq_api_key
+    api_key=secrets.get_api_key("groq")
 )
+
+@app.on_event("startup")
+async def startup_event():
+    global firebase_app
+    try:
+        # Import Firebase credentials
+        from firebase_admin import credentials as fb_credentials
+        
+        # Create a credential object
+        cred = fb_credentials.ApplicationDefault()
+        
+        # Initialize Firebase with explicit credentials
+        firebase_app = initialize_app(
+            credential=cred,
+            options={
+                'projectId': 'genia-ai-19a34'
+            }
+        )
+        logger.info("Firebase initialized successfully")
+    except Exception as e:
+        logger.exception(f"Error initializing Firebase")
+        raise e
+
+# Dependency to get current user from token
+async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    token = credentials.credentials
+    logger.info(f"Verifying token: {token[:10]}...{token[-10:]} (truncated for security)")
+    try:
+        # Add more detailed debugging
+        logger.debug("About to verify Firebase ID token")
+        decoded_token = auth.verify_id_token(token)
+        logger.info(f"Successfully decoded token with UID: {decoded_token.get('uid')}")
+        return decoded_token
+    except Exception as e:
+        logger.exception(f"Detailed error verifying Firebase ID token: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Invalid authentication token: {str(e)}"
+        )
 
 class TextRequest(BaseModel):
     text: str
@@ -116,7 +112,7 @@ def create_invite_code(invite_code: InviteCodeCreate, db: Session = Depends(get_
     if db_code:
         raise HTTPException(status_code=400, detail="Invitation code already exists")
 
-    new_code = models.InvitationCode(
+    new_code = InvitationCode(
         code=invite_code.code,
         expires_at=invite_code.expires_at,
         is_active=invite_code.is_active
@@ -174,4 +170,22 @@ async def process_text(
         raise HTTPException(
             status_code=500,
             detail=f"Unexpected error: {str(e)}"
+        )
+
+@app.get("/protected-route")
+async def protected_route(current_user: dict = Depends(get_current_user)):
+    try:
+        # Get additional user information from Firebase
+        user = auth.get_user(current_user["uid"])
+        return {
+            "uid": user.uid,
+            "phone_number": user.phone_number,
+            "provider_id": "phone",
+            "display_name": user.display_name,
+            "email": user.email
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving user details: {str(e)}"
         )
