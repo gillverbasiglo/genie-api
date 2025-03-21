@@ -19,7 +19,8 @@ from .secrets_manager import SecretsManager
 from .database import engine, Base, SessionLocal
 from .config import Settings
 from sqlalchemy.orm import Session
-from .tripadvisor_endpoints import router as tripadvisor_endpoints
+from .tripadvisor_endpoints import router as TripAdvisorEndpoints
+from .googlePlaces_endpoints import router as GooglePlacesEndpoints
 from .models import InvitationCode, InviteCodeCreate
 from .identity_credentials import WorkloadIdentityCredentials
 
@@ -36,8 +37,9 @@ secrets = SecretsManager(region_name=settings.aws_region)
 cache = TTLCache(maxsize=1, ttl=3600)
 
 
-# Include the TripAdvisor router
-app.include_router(tripadvisor_endpoints)
+# Include the TripAdvisor and Google Places routers
+app.include_router(TripAdvisorEndpoints)
+app.include_router(GooglePlacesEndpoints)
 
 async def create_tables():
     async with engine.begin() as conn:
