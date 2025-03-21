@@ -22,7 +22,7 @@ router = APIRouter(prefix="/googlePlaces", tags=["googlePlaces"])
 settings = Settings()
 secrets = SecretsManager(region_name=settings.aws_region)
 
-API_KEY = secrets.get_api_key("google-places")
+API_KEY = secrets.get_api_key("google")
 BASE_URL = "https://maps.googleapis.com/maps/api/place"
 
 # Models for response validation
