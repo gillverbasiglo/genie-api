@@ -1,41 +1,34 @@
-import requests
-import json
 import firebase_admin
-import logging
 import google.auth
+import json
+import logging
+import requests
 import os
 
 from cachetools import cached, TTLCache
-from fastapi import FastAPI, Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from firebase_admin import initialize_app, credentials, auth
+from datetime import datetime
+from fastapi import Depends, HTTPException, status
 from jose import jwt
 from openai import OpenAI, OpenAIError
 from pydantic import BaseModel
-from datetime import datetime
-
-from .secrets_manager import SecretsManager
-
-from .database import engine, Base, SessionLocal
-from .config import Settings
 from sqlalchemy.orm import Session
-from .tripadvisor_endpoints import router as TripAdvisorEndpoints
-from .googlePlaces_endpoints import router as GooglePlacesEndpoints
-from .models import InvitationCode, InviteCodeCreate
-from .identity_credentials import WorkloadIdentityCredentials
 
-app = FastAPI()
+from .common import app, get_current_user
+from .config import Settings
+from .database import engine, Base, SessionLocal
+from .google_places_endpoints import router as GooglePlacesEndpoints
+from .identity_credentials import WorkloadIdentityCredentials
+from .models import InvitationCode, InviteCodeCreate
+from .secrets_manager import SecretsManager
+from .trip_advisor_endpoints import router as TripAdvisorEndpoints
+
 logger = logging.getLogger(__name__)
-security = HTTPBearer()
-# Initialize Firebase
-firebase_app = None
 
 settings = Settings()
 secrets = SecretsManager(region_name=settings.aws_region)
 
 # Cache the JWKS for 1 hour to avoid fetching it on every request
 cache = TTLCache(maxsize=1, ttl=3600)
-
 
 # Include the TripAdvisor and Google Places routers
 app.include_router(TripAdvisorEndpoints)
@@ -57,49 +50,10 @@ client = OpenAI(
     api_key=secrets.get_api_key("groq")
 )
 
-@app.on_event("startup")
-async def startup_event():
-    global firebase_app
-    try:
-        # Import Firebase credentials
-        from firebase_admin import credentials as fb_credentials
-        
-        # Create a credential object
-        cred = fb_credentials.ApplicationDefault()
-        
-        # Initialize Firebase with explicit credentials
-        firebase_app = initialize_app(
-            credential=cred,
-            options={
-                'projectId': 'genia-ai-19a34'
-            }
-        )
-        logger.info("Firebase initialized successfully")
-    except Exception as e:
-        logger.exception(f"Error initializing Firebase")
-        raise e
-
-# Dependency to get current user from token
-async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    token = credentials.credentials
-    logger.info(f"Verifying token: {token[:10]}...{token[-10:]} (truncated for security)")
-    try:
-        # Add more detailed debugging
-        logger.debug("About to verify Firebase ID token")
-        decoded_token = auth.verify_id_token(token)
-        logger.info(f"Successfully decoded token with UID: {decoded_token.get('uid')}")
-        return decoded_token
-    except Exception as e:
-        logger.exception(f"Detailed error verifying Firebase ID token: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Invalid authentication token: {str(e)}"
-        )
-
 class TextRequest(BaseModel):
     text: str
 
-@app.post("/validate-code/")
+@app.post("/validate-code/", dependencies=[Depends(get_current_user)])
 async def validate_code(code: str, db: Session = Depends(get_db)):
     db_code = db.query(InvitationCode).filter(InvitationCode.code == code).first()
     if not db_code:
@@ -113,7 +67,7 @@ async def validate_code(code: str, db: Session = Depends(get_db)):
     return {"message": "Invite Code is valid"}
 
 @app.post("/create-invite-code/")
-def create_invite_code(invite_code: InviteCodeCreate, db: Session = Depends(get_db)):
+def create_invite_code(invite_code: InviteCodeCreate, db: Session = Depends(get_db), dependencies=[Depends(get_current_user)]):
     # Check if code already exists
     db_code = db.query(InvitationCode).filter(InvitationCode.code == invite_code.code).first()
     if db_code:
@@ -131,7 +85,7 @@ def create_invite_code(invite_code: InviteCodeCreate, db: Session = Depends(get_
 
     return {"message": "Invitation code created successfully", "code": new_code.code}
 
-@app.post("/process-text", response_model=dict[str, str])
+@app.post("/process-text", dependencies=[Depends(get_current_user)], response_model=dict[str, str])
 async def process_text(
     request: TextRequest
 ) -> dict[str, str]:

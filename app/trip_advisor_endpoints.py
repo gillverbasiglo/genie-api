@@ -1,18 +1,16 @@
 # tripadvisor_routes.py
-
-from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel, Field
-from typing import Optional, List
 import httpx
 import logging
-from enum import Enum
 import os
-from dotenv import load_dotenv
-from .secrets_manager import SecretsManager
-from .config import Settings
 
-# Load environment variables
-load_dotenv()
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
+from typing import Optional, List
+from enum import Enum
+
+from .common import get_current_user
+from .config import Settings
+from .secrets_manager import SecretsManager
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -26,7 +24,7 @@ settings = Settings()
 secrets = SecretsManager(region_name=settings.aws_region)
 
 # Get API key from AWS Secrets Manager like we did in the main.py file for groq
-API_KEY = secrets.get_api_key("tripAdvisor")
+API_KEY = secrets.get_api_key("trip-advisor")
 BASE_URL = "https://api.content.tripadvisor.com/api/v1"
 
 # Enum definitions
@@ -71,7 +69,7 @@ async def get_client():
     return httpx.AsyncClient(timeout=20.0)
 
 # Endpoint for location search
-@router.get("/location/search", response_model=TravelSearchResponse)
+@router.get("/location/search", response_model=TravelSearchResponse, dependencies=[Depends(get_current_user)])
 async def search_locations(
     search_query: str,
     category: Optional[LocationCategory] = None,
@@ -122,7 +120,7 @@ async def search_locations(
             raise HTTPException(status_code=500, detail=f"Request error: {str(e)}")
 
 # Endpoint for location details
-@router.get("/location/{location_id}/details", response_model=TravelDestinationDetail)
+@router.get("/location/{location_id}/details", response_model=TravelDestinationDetail, dependencies=[Depends(get_current_user)])
 async def get_location_details(
     location_id: str,
     language: str = "en",
@@ -155,7 +153,7 @@ async def get_location_details(
             raise HTTPException(status_code=500, detail=f"Error processing response: {str(e)}")
 
 # Endpoint for location photos
-@router.get("/location/{location_id}/photos", response_model=TravelPhotosResponse)
+@router.get("/location/{location_id}/photos", response_model=TravelPhotosResponse, dependencies=[Depends(get_current_user)])
 async def get_location_photos(
     location_id: str,
     language: str = "en",
@@ -202,7 +200,7 @@ async def search_attractions(location: str):
 async def search_restaurants(location: str):
     return await search_locations(search_query=location, category=LocationCategory.restaurants)
 
-@router.get("/nearby", response_model=TravelSearchResponse)
+@router.get("/nearby", response_model=TravelSearchResponse, dependencies=[Depends(get_current_user)])
 async def search_nearby(
     query: str,
     latitude: float,
