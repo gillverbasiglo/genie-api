@@ -19,7 +19,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Create router
-router = APIRouter(prefix="/tripadvisor", tags=["tripadvisor"])
+router = APIRouter(prefix="/tripAdvisor", tags=["tripAdvisor"])
 
 
 settings = Settings()

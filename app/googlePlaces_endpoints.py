@@ -6,20 +6,21 @@ from typing import Optional, List, Dict, Any
 import httpx
 import logging
 import os
-from dotenv import load_dotenv
+from .secrets_manager import SecretsManager
+from .config import Settings
 
-# Load environment variables
-load_dotenv()
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Create router
-router = APIRouter(prefix="/places", tags=["places"])
+router = APIRouter(prefix="/googlePlaces", tags=["googlePlaces"])
 
-# API configuration for testing purposes
-API_KEY = os.getenv("GOOGLE_PLACES_API_KEY", "AIzaSyBvCs3qRElCb82VSo6rYBwLCDQ7xPP8Pm8")
+settings = Settings()
+secrets = SecretsManager(region_name=settings.aws_region)
+
+API_KEY = secrets.get_api_key("googlePlaces")
 BASE_URL = "https://maps.googleapis.com/maps/api/place"
 
 # Models for response validation
