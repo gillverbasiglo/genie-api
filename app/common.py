@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from firebase_admin import initialize_app, credentials, auth
@@ -6,6 +8,8 @@ app = FastAPI()
 security = HTTPBearer()
 # Initialize Firebase
 firebase_app = None
+
+logger = logging.getLogger(__name__)
 
 @app.on_event("startup")
 async def startup_event():
