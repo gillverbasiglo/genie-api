@@ -45,13 +45,9 @@ def get_db():
     finally:
         db.close()
 
-client = OpenAI(
-    base_url="https://api.groq.com/openai/v1",
-    api_key=secrets.get_api_key("groq")
-)
-
 class TextRequest(BaseModel):
     text: str
+    provider: str = "groq"
 
 @app.post("/validate-code/", dependencies=[Depends(get_current_user)])
 async def validate_code(code: str, db: Session = Depends(get_db)):
@@ -102,13 +98,30 @@ async def process_text(
         HTTPException: When API authentication fails or service is unavailable
     """
     try:
-        response = client.chat.completions.create(
-            model="llama-3.1-8b-instant",
-            messages=[
-                {"role": "user", "content": request.text}
-            ]
-        )
-        
+        if request.provider == "groq":
+            client = OpenAI(
+                base_url="https://api.groq.com/openai/v1",
+                api_key=secrets.get_api_key("groq")
+            )
+
+            response = client.chat.completions.create(
+                model="llama-3.1-8b-instant",
+                messages=[
+                    {"role": "user", "content": request.text}
+                ]
+            )
+        elif request.provider == "openai":
+            client = OpenAI(
+                api_key=secrets.get_api_key("openai")
+            )
+
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "user", "content": request.text}
+                ]
+            )
+
         return {"result": response.choices[0].message.content}
         
     except OpenAIError as e:
