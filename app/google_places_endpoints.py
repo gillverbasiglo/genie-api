@@ -188,6 +188,7 @@ async def search_places(query: str, place_type: str = None, location: str = None
             logger.debug(f"Making Places API request to: {url}")
             headers = get_auth_header()
             headers["Content-Type"] = "application/json"
+            headers["X-Goog-FieldMask"] = "*"
             
             response = await client.post(url, json=request_data, headers=headers)
             
