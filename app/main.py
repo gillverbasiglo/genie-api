@@ -14,18 +14,14 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from .common import app, get_current_user
-from .config import Settings
+from .config import settings
 from .database import engine, Base, SessionLocal
 from .google_places_endpoints import router as GooglePlacesEndpoints
 from .identity_credentials import WorkloadIdentityCredentials
 from .models import InvitationCode, InviteCodeCreate
-from .secrets_manager import SecretsManager
 from .trip_advisor_endpoints import router as TripAdvisorEndpoints
 
 logger = logging.getLogger(__name__)
-
-settings = Settings()
-secrets = SecretsManager(region_name=settings.aws_region)
 
 # Cache the JWKS for 1 hour to avoid fetching it on every request
 cache = TTLCache(maxsize=1, ttl=3600)
@@ -101,7 +97,7 @@ async def process_text(
         if request.provider == "groq":
             client = OpenAI(
                 base_url="https://api.groq.com/openai/v1",
-                api_key=secrets.get_api_key("groq")
+                api_key=settings.groq_api_key
             )
 
             response = client.chat.completions.create(
@@ -112,7 +108,7 @@ async def process_text(
             )
         elif request.provider == "openai":
             client = OpenAI(
-                api_key=secrets.get_api_key("openai")
+                api_key=settings.openai_api_key
             )
 
             response = client.chat.completions.create(

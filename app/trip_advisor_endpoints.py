@@ -9,7 +9,7 @@ from typing import Optional, List
 from enum import Enum
 
 from .common import get_current_user
-from .config import Settings
+from .config import settings
 from .secrets_manager import SecretsManager
 
 # Configure logging
@@ -19,12 +19,8 @@ logger = logging.getLogger(__name__)
 # Create router
 router = APIRouter(prefix="/tripAdvisor", tags=["tripAdvisor"])
 
-
-settings = Settings()
-secrets = SecretsManager(region_name=settings.aws_region)
-
 # Get API key from AWS Secrets Manager like we did in the main.py file for groq
-API_KEY = secrets.get_api_key("trip-advisor")
+API_KEY = settings.trip_advisor_api_key
 BASE_URL = "https://api.content.tripadvisor.com/api/v1"
 
 # Enum definitions

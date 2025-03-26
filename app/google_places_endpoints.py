@@ -8,8 +8,7 @@ from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any, Union
 
 from .common import get_current_user
-from .config import Settings
-from .secrets_manager import SecretsManager
+from .config import settings
 
 
 # Configure logging
@@ -19,10 +18,8 @@ logger = logging.getLogger(__name__)
 # Create router
 router = APIRouter(prefix="/googlePlaces", tags=["googlePlaces"])
 
-settings = Settings()
-secrets = SecretsManager(region_name=settings.aws_region)
+API_KEY = settings.google_api_key
 
-API_KEY = secrets.get_api_key("google")
 BASE_URL = "https://places.googleapis.com/v1"  # Updated base URL for Places API v1
 
 # Models for response validation
