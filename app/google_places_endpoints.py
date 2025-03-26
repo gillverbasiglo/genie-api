@@ -157,9 +157,7 @@ async def search_places(query: str, place_type: str = None, location: str = None
     
     # Prepare request body
     request_data = {
-        "textQuery": {
-            "text": query
-        }
+        "textQuery": query
     }
     
     # Add location bias if provided
