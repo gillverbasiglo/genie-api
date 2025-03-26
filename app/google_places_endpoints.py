@@ -211,10 +211,8 @@ async def get_place_details(place_id: str, fields: str = None):
     
     async with await get_client() as client:
         try:
-            # Build URL with place ID
             url = f"{BASE_URL}/places/{place_id}"
             
-            # Add fields parameter if provided
             params = {}
             if fields:
                 params["fields"] = fields
@@ -228,16 +226,29 @@ async def get_place_details(place_id: str, fields: str = None):
                 logger.error(f"Place details request failed with status code: {response.status_code}, response: {response.text}")
                 raise HTTPException(status_code=response.status_code, detail="Error from Google Places API")
             
-            response_data = response.json()
-            logger.debug(f"Place details data: {response_data}")
-            
-            logger.debug(f"Successfully processed details for {response_data.get('name', 'Unknown place')}")
-            
-            return response_data
+            try:
+                response_data = response.json()
+                logger.debug(f"Place details data: {response_data}")
+                
+                # Add type checking before returning
+                if not isinstance(response_data, dict):
+                    logger.error(f"Unexpected response format: {response_data}")
+                    raise HTTPException(status_code=500, detail="Invalid response format from Google Places API")
+                
+                logger.debug(f"Successfully processed details for {response_data.get('name', 'Unknown place')}")
+                
+                return {"status": "success", "data": response_data}
+                
+            except ValueError as json_error:
+                logger.error(f"JSON decode error: {str(json_error)}")
+                raise HTTPException(status_code=500, detail="Failed to decode API response")
             
         except httpx.RequestError as e:
             logger.error(f"Request error: {str(e)}")
             raise HTTPException(status_code=500, detail=f"Request error: {str(e)}")
+        except Exception as e:
+            logger.error(f"Unexpected error in get_place_details: {str(e)}")
+            raise HTTPException(status_code=500, detail="An unexpected error occurred")
 
 # Endpoint for raw place details response
 @router.get("/raw-details/{place_id}", dependencies=[Depends(get_current_user)])
