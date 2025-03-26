@@ -3,7 +3,7 @@ import httpx
 import logging
 import os
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any, Union
 
@@ -208,7 +208,7 @@ async def search_places(query: str, place_type: str = None, location: str = None
             raise HTTPException(status_code=500, detail=f"Request error: {str(e)}")
 
 # Endpoint for places details
-@router.get("/details/{place_id}", response_model=PlaceDetailsResponse, dependencies=[Depends(get_current_user)])
+@router.get("/details/{place_id}", dependencies=[Depends(get_current_user)])
 async def get_place_details(place_id: str, fields: str = None):
     logger.debug(f"Fetching details for place ID: {place_id}")
     
