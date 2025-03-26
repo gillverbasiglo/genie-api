@@ -223,6 +223,7 @@ async def get_place_details(place_id: str, fields: str = None):
                 params["fields"] = fields
             
             headers = get_auth_header()
+            headers["X-Goog-FieldMask"] = "*"
             
             response = await client.get(url, params=params, headers=headers)
             
@@ -256,6 +257,7 @@ async def get_place_details_raw(place_id: str, fields: str = None):
                 params["fields"] = fields
             
             headers = get_auth_header()
+            headers["X-Goog-FieldMask"] = "*"
             
             response = await client.get(url, params=params, headers=headers)
             
@@ -288,6 +290,7 @@ async def get_place_photo(photo_name: str, max_width_px: int = None, max_height_
             url = f"{BASE_URL}/{photo_name}/media"
             
             headers = get_auth_header()
+            headers["X-Goog-FieldMask"] = "*"
             
             response = await client.get(url, params=params, headers=headers)
             
