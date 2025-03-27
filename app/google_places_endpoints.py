@@ -278,26 +278,26 @@ async def get_place_details_raw(place_id: str, fields: str = None):
             raise HTTPException(status_code=500, detail=f"Request error: {str(e)}")
 
 # Updated endpoint for photos using new v1 API
-@router.get("/photos/{photo_name}", dependencies=[Depends(get_current_user)])
-async def get_place_photo(photo_name: str, max_width_px: int = None, max_height_px: int = None):
+@router.get("/{place_id}/photos/{photo_name}", dependencies=[Depends(get_current_user)])
+async def get_place_photo(photo_name: str, place_id: str, maxWidthPx: int = None, maxHeightPx: int = None, skipHttpRedirect: bool = True):
     logger.debug(f"Fetching photo with name: {photo_name}")
     
     # Create query parameters
     params = {}
-    if max_width_px:
-        params["maxWidthPx"] = max_width_px
-    if max_height_px:
-        params["maxHeightPx"] = max_height_px
-    
+    if maxWidthPx:
+        params["maxWidthPx"] = maxWidthPx
+    if maxHeightPx:
+        params["maxHeightPx"] = maxHeightPx
+    params["skipHttpRedirect"] = skipHttpRedirect
     async with await get_client() as client:
         try:
             # Use the v1 photos endpoint with the photo name
-            url = f"{BASE_URL}/{photo_name}/media"
+            url = f"{BASE_URL}/places/{place_id}/photos/{photo_name}/media"
             
             headers = get_auth_header()
             headers["X-Goog-FieldMask"] = "*"
             
-            response = await client.get(url, params=params, headers=headers)
+            response = await client.get(url, params=params, headers=headers, follow_redirects=True)
             
             if response.status_code != 200:
                 logger.error(f"Photo request failed with status code: {response.status_code}, response: {response.text}")
