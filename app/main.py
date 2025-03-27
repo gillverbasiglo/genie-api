@@ -97,7 +97,7 @@ async def process_text(
         if request.provider == "groq":
             client = OpenAI(
                 base_url="https://api.groq.com/openai/v1",
-                api_key=settings.groq_api_key
+                api_key=settings.groq_api_key.get_secret_value()
             )
 
             response = client.chat.completions.create(
@@ -108,7 +108,7 @@ async def process_text(
             )
         elif request.provider == "openai":
             client = OpenAI(
-                api_key=settings.openai_api_key
+                api_key=settings.openai_api_key.get_secret_value()
             )
 
             response = client.chat.completions.create(

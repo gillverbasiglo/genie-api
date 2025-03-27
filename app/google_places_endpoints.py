@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 # Create router
 router = APIRouter(prefix="/googlePlaces", tags=["googlePlaces"])
 
-API_KEY = settings.google_api_key
+API_KEY = settings.google_api_key.get_secret_value()
 
 BASE_URL = "https://places.googleapis.com/v1"  # Updated base URL for Places API v1
 

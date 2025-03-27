@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/tripAdvisor", tags=["tripAdvisor"])
 
 # Get API key from AWS Secrets Manager like we did in the main.py file for groq
-API_KEY = settings.trip_advisor_api_key
+API_KEY = settings.trip_advisor_api_key.get_secret_value()
 BASE_URL = "https://api.content.tripadvisor.com/api/v1"
 
 # Enum definitions
