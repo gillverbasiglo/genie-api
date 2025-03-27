@@ -66,8 +66,8 @@ class AuthorAttribution(BaseModel):
 
 class Photo(BaseModel):
     name: str
-    width_px: int
-    height_px: int
+    width_px: Optional[int] = None
+    height_px: Optional[int] = None
     reference: Optional[str] = None
     author_attribution: Optional[AuthorAttribution] = None
 
@@ -127,9 +127,6 @@ class PlaceSearchRequest(BaseModel):
 
 class PlacesSearchResponse(BaseModel):
     places: List[Place]
-
-class PlaceDetailsResponse(BaseModel):
-    place: Place
 
 class MediaMetadata(BaseModel):
     width: Optional[int] = None
@@ -205,7 +202,7 @@ async def search_places(query: str, place_type: str = None, location: str = None
             raise HTTPException(status_code=500, detail=f"Request error: {str(e)}")
 
 # Endpoint for places details
-@router.get("/details/{place_id}", dependencies=[Depends(get_current_user)])
+@router.get("/details/{place_id}", response_model=Place, dependencies=[Depends(get_current_user)])
 async def get_place_details(place_id: str, fields: str = None):
     logger.debug(f"Fetching details for place ID: {place_id}")
     
@@ -237,7 +234,7 @@ async def get_place_details(place_id: str, fields: str = None):
                 
                 logger.debug(f"Successfully processed details for {response_data.get('name', 'Unknown place')}")
                 
-                return {"status": "success", "data": response_data}
+                return response_data
                 
             except ValueError as json_error:
                 logger.error(f"JSON decode error: {str(json_error)}")
