@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     environment: str = "development"
     host: str
     db_username: str
-    db_password: SecretStr  # Changed from SecretStr to str for local development
+    db_password: SecretStr
     database: str
     port: int = 5432
     groq_api_key: SecretStr  
