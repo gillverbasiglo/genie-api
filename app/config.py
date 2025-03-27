@@ -8,13 +8,13 @@ class Settings(BaseSettings):
     environment: str = "development"
     host: str
     db_username: str
-    db_password: str  # Changed from SecretStr to str for local development
+    db_password: SecretStr  # Changed from SecretStr to str for local development
     database: str
     port: int = 5432
-    groq_api_key: str  
-    openai_api_key: str  
-    trip_advisor_api_key: str  
-    google_api_key: str  
+    groq_api_key: SecretStr  
+    openai_api_key: SecretStr  
+    trip_advisor_api_key: SecretStr  
+    google_api_key: SecretStr  
     
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
@@ -25,17 +25,17 @@ class Settings(BaseSettings):
             try:
                 secrets = SecretsManager(region_name=info.data.get("aws_region"))
                 if info.field_name == "groq_api_key":
-                    return secrets.get_api_key("groq")
+                    v = secrets.get_api_key("groq")
                 elif info.field_name == "openai_api_key":
-                    return secrets.get_api_key("openai")
+                    v = secrets.get_api_key("openai")
                 elif info.field_name == "trip_advisor_api_key":
-                    return secrets.get_api_key("trip-advisor")
+                    v = secrets.get_api_key("trip-advisor")
                 elif info.field_name == "google_api_key":
-                    return secrets.get_api_key("google")
+                    v = secrets.get_api_key("google")
                 elif info.field_name == "db_username":
-                    return secrets.get_db_credentials()['username']
+                    v = secrets.get_db_credentials()['username']
                 elif info.field_name == "db_password":
-                    return secrets.get_db_credentials()['password']
+                    v = secrets.get_db_credentials()['password']
             except Exception as e:
                 # If there's an error getting secrets, fall back to the env value
                 return v
