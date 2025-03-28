@@ -36,6 +36,7 @@ class Settings(BaseSettings):
                     v = secrets.get_db_credentials()['username']
                 elif info.field_name == "db_password":
                     v = secrets.get_db_credentials()['password']
+                return v
             except Exception as e:
                 # If there's an error getting secrets, fall back to the env value
                 return v
