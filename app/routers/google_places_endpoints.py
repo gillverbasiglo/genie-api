@@ -43,15 +43,15 @@ class PlaceOpeningHoursPeriod(BaseModel):
     close: Optional[Dict[str, Any]] = None
 
 class PlaceOpeningHours(BaseModel):
-    open_now: Optional[bool] = None
-    periods: Optional[List[PlaceOpeningHoursPeriod]] = None
-    weekday_text: Optional[List[str]] = None
-    secondary_hours: Optional[List[Dict[str, Any]]] = None
-    type: Optional[str] = None
+    open_now: Optional[bool] = Field(alias="openNow", serialization_alias="open_now", default=None)
+    periods: Optional[List[PlaceOpeningHoursPeriod]] = Field(alias="periods", serialization_alias="periods", default=None)
+    weekday_text: Optional[List[str]] = Field(alias="weekdayDescriptions", serialization_alias="weekday_text", default=None)
+    secondary_hours: Optional[List[Dict[str, Any]]] = Field(alias="secondaryHours", serialization_alias="secondary_hours", default=None)
+    type: Optional[str] = Field(alias="type", serialization_alias="type", default=None)
 
 class PlusCode(BaseModel):
-    global_code: Optional[str] = None
-    compound_code: Optional[str] = None
+    global_code: Optional[str] = Field(alias="globalCode", serialization_alias="global_code", default=None)
+    compound_code: Optional[str] = Field(alias="compoundCode", serialization_alias="compound_code", default=None)
 
 class AddressComponent(BaseModel):
     long_name: str
@@ -61,14 +61,13 @@ class AddressComponent(BaseModel):
 class AuthorAttribution(BaseModel):
     display_name: Optional[str] = None
     uri: Optional[str] = None
-    photo_uri: Optional[str] = None
+    photo_uri: Optional[str] = Field(alias="photoUri", serialization_alias="photo_uri", default=None)
 
 class Photo(BaseModel):
     name: str
-    width_px: Optional[int] = None
-    height_px: Optional[int] = None
-    reference: Optional[str] = None
-    author_attribution: Optional[AuthorAttribution] = None
+    width_px: Optional[int] = Field(alias="widthPx", serialization_alias="width_px", default=None)
+    height_px: Optional[int] = Field(alias="heightPx", serialization_alias="height_px", default=None)
+    author_attribution: Optional[List[AuthorAttribution]] = Field(alias="authorAttributions", serialization_alias="author_attributions", default=None)
 
 class Review(BaseModel):
     name: Optional[str] = None
@@ -83,44 +82,50 @@ class PriceLevel(BaseModel):
     level: Optional[int] = None
     price_range: Optional[str] = None
 
+class DisplayName(BaseModel):
+    text: str
+    languageCode: Optional[str] = None
+
 class Place(BaseModel):
-    name: str
     id: str
-    types: Optional[List[str]] = None
-    national_phone_number: Optional[str] = None
-    international_phone_number: Optional[str] = None
-    formatted_address: Optional[str] = None
-    address_components: Optional[List[AddressComponent]] = None
+    display_name: DisplayName = Field(serialization_alias="display_name", alias="displayName")
+    formatted_address: Optional[str] = Field(alias="formattedAddress", serialization_alias="formattedAddress", default=None)
     location: Optional[Location] = None
     viewport: Optional[Viewport] = None
     rating: Optional[float] = None
-    user_ratings_total: Optional[int] = None
-    editorial_summary: Optional[Dict[str, str]] = None
+    user_ratings_total: Optional[int] = Field(alias="userRatingCount", serialization_alias="user_ratings_total", default=None)
+    editorial_summary: Optional[Dict[str, str]] = Field(alias="editorialSummary", serialization_alias="editorial_summary", default=None)
     photos: Optional[List[Photo]] = None
-    price_level: Optional[PriceLevel] = None
+    price_level: Optional[str] = Field(alias="priceLevel", serialization_alias="price_level", default=None)
     opening_hours: Optional[PlaceOpeningHours] = None
-    website_uri: Optional[str] = None
-    icon_mask_base_uri: Optional[str] = None
-    icon_background_color: Optional[str] = None
-    plus_code: Optional[PlusCode] = None
-    current_opening_hours: Optional[PlaceOpeningHours] = None
-    secondary_opening_hours: Optional[List[PlaceOpeningHours]] = None
-    curbside_pickup: Optional[bool] = None
-    delivery: Optional[bool] = None
-    dine_in: Optional[bool] = None
-    reservable: Optional[bool] = None
-    serves_breakfast: Optional[bool] = None
-    serves_lunch: Optional[bool] = None
-    serves_dinner: Optional[bool] = None
-    takeout: Optional[bool] = None
-    serves_vegetarian_food: Optional[bool] = None
+    website_uri: Optional[str] = Field(alias="websiteUri", serialization_alias="website_uri", default=None)
+    icon_mask_base_uri: Optional[str] = Field(alias="iconMaskBaseUri", serialization_alias="icon_mask_base_uri", default=None)
+    icon_background_color: Optional[str] = Field(alias="iconBackgroundColor", serialization_alias="icon_background_color", default=None)
+    plus_code: Optional[PlusCode] = Field(alias="plusCode", serialization_alias="plus_code", default=None)
+    current_opening_hours: Optional[PlaceOpeningHours] = Field(alias="currentOpeningHours", serialization_alias="current_opening_hours", default=None)
+    secondary_opening_hours: Optional[List[PlaceOpeningHours]] = Field(alias="secondaryOpeningHours", serialization_alias="secondary_opening_hours", default=None)
+    curbside_pickup: Optional[bool] = Field(alias="curbsidePickup", serialization_alias="curbside_pickup", default=None)
+    delivery: Optional[bool] = Field(alias="delivery", serialization_alias="delivery", default=None)
+    dine_in: Optional[bool] = Field(alias="dineIn", serialization_alias="dine_in", default=None)
+    reservable: Optional[bool] = Field(alias="reservable", serialization_alias="reservable", default=None)
+    serves_breakfast: Optional[bool] = Field(alias="servesBreakfast", serialization_alias="serves_breakfast", default=None)
+    serves_lunch: Optional[bool] = Field(alias="servesLunch", serialization_alias="serves_lunch", default=None)
+    serves_dinner: Optional[bool] = Field(alias="servesDinner", serialization_alias="serves_dinner", default=None)
+    takeout: Optional[bool] = Field(alias="takeout", serialization_alias="takeout", default=None)
+    serves_vegetarian_food: Optional[bool] = Field(alias="servesVegetarianFood", serialization_alias="serves_vegetarian_food", default=None)
     reviews: Optional[List[Review]] = None
     url: Optional[str] = None
 
+    class Config:
+        allow_population_by_alias = True
+        # alias_generator = lambda x: x.replace('_', '')
+
 class PlaceSearchRequest(BaseModel):
-    text_query: TextQuery
-    location_bias: Optional[LocationRestriction] = None
-    included_type: Optional[str] = None
+    query: str
+    place_type: Optional[str] = None
+    location: Optional[str] = None
+    radius: float = 5000.0
+    fields: str = "places.id,places.displayName,places.formattedAddress,places.location,places.rating,places.editorialSummary,places.photos,places.priceLevel,places.websiteUri,places.iconMaskBaseUri,places.iconBackgroundColor,places.plusCode,places.currentOpeningHours,places.curbsidePickup,places.delivery,places.dineIn,places.reservable,places.servesBreakfast,places.servesLunch,places.servesDinner,places.takeout,places.servesVegetarianFood,places.reviews,places.userRatingCount"
     language_code: Optional[str] = None
     region_code: Optional[str] = None
 
@@ -144,35 +149,35 @@ def get_auth_header():
     return {"X-Goog-Api-Key": API_KEY}
 
 # Endpoint for places search
-@router.get("/search", response_model=PlacesSearchResponse, dependencies=[Depends(get_current_user)])
-async def search_places(query: str, place_type: str = None, location: str = None):
-    logger.info(f"Searching places with query: '{query}'")
+@router.post("/search", response_model=PlacesSearchResponse, dependencies=[Depends(get_current_user)])
+async def search_places(request: PlaceSearchRequest):
+    logger.info(f"Searching places with query: '{request.query}'")
     
     # Prepare request body
     request_data = {
-        "textQuery": query
+        "textQuery": request.query
     }
     
     # Add location bias if provided
-    if location:
+    if request.location:
         try:
             # Assuming location is in format "lat,lng"
-            lat, lng = map(float, location.split(','))
+            lat, lng = map(float, request.location.split(','))
             request_data["locationBias"] = {
                 "circle": {
                     "center": {
                         "latitude": lat,
                         "longitude": lng
                     },
-                    "radius": 5000.0  # 5km radius
+                    "radius": request.radius  # 5km radius
                 }
             }
         except:
-            logger.warning(f"Invalid location format: {location}. Expected 'lat,lng'")
+            logger.warning(f"Invalid location format: {request.location}. Expected 'lat,lng'")
     
     # Add included type if provided
-    if place_type:
-        request_data["includedType"] = place_type
+    if request.place_type:
+        request_data["includedType"] = request.place_type
     
     async with await get_client() as client:
         try:
@@ -181,7 +186,7 @@ async def search_places(query: str, place_type: str = None, location: str = None
             logger.debug(f"Making Places API request to: {url}")
             headers = get_auth_header()
             headers["Content-Type"] = "application/json"
-            headers["X-Goog-FieldMask"] = "*"
+            headers["X-Goog-FieldMask"] = request.fields
             
             response = await client.post(url, json=request_data, headers=headers)
             
