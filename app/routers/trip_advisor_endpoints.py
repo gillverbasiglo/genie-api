@@ -1,16 +1,14 @@
 # tripadvisor_routes.py
 import httpx
 import logging
-import os
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from typing import Optional, List
 from enum import Enum
 
-from .common import get_current_user
-from .config import settings
-from .secrets_manager import SecretsManager
+from app.common import get_current_user
+from ..config import settings
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
