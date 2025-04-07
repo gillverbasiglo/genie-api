@@ -24,3 +24,4 @@ async def apple_app_site_association():
     response.headers["Cache-Control"] = "public, max-age=86400"
     
     return response
+
