@@ -21,6 +21,7 @@ from .routers.google_places_endpoints import router as GooglePlacesEndpoints
 from .identity_credentials import WorkloadIdentityCredentials
 from .routers.trip_advisor_endpoints import router as TripAdvisorEndpoints
 from .routers.invitations_endpoints import router as InvitationsEndpoints
+from .routers.apple_site_association_endpoint import router as AppleSiteAssociationEndpoint
 logger = logging.getLogger(__name__)
 
 # Cache the JWKS for 1 hour to avoid fetching it on every request
@@ -30,6 +31,7 @@ cache = TTLCache(maxsize=1, ttl=3600)
 app.include_router(TripAdvisorEndpoints)
 app.include_router(GooglePlacesEndpoints)
 app.include_router(InvitationsEndpoints)
+app.include_router(AppleSiteAssociationEndpoint)
 
 async def create_tables():
     async with engine.begin() as conn:
