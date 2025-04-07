@@ -42,6 +42,13 @@ class UserCreate(BaseModel):
     display_name: Optional[str] = None
     invite_code: Optional[str] = None  # To track who invited them
 
+class PendingInvitationResponse(BaseModel):
+    phone_number: str
+    email: Optional[str]
+    invite_code: str
+    invited_at: datetime
+    status: str
+
 @router.post("/send", response_model=List[InvitationResponse])
 async def send_invitation(
     invitation_data: BulkInvitationCreate,
@@ -194,4 +201,31 @@ async def register_user(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error registering user: {str(e)}"
-        ) 
+        )
+
+@router.post("/pending-invitations", response_model=List[PendingInvitationResponse])
+async def get_pending_invitations(
+    phone_numbers: List[str],
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    # Get all pending invitations for these phone numbers
+    pending_invites = db.query(Invitation).filter(
+        Invitation.inviter_id == current_user["uid"],
+        Invitation.invitee_phone.in_(phone_numbers),
+        Invitation.status == "pending"
+    ).all()
+    
+    # Convert to response format
+    response = [
+        PendingInvitationResponse(
+            phone_number=invite.invitee_phone,
+            email=invite.invitee_email,
+            invite_code=invite.invite_code,
+            invited_at=invite.created_at,
+            status=invite.status
+        )
+        for invite in pending_invites
+    ]
+    
+    return response 
