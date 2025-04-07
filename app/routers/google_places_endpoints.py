@@ -1,5 +1,6 @@
 # places_routes.py
 import httpx
+import asyncio
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -46,8 +47,8 @@ class PlaceOpeningHours(BaseModel):
     open_now: Optional[bool] = Field(alias="openNow", serialization_alias="open_now", default=None)
     periods: Optional[List[PlaceOpeningHoursPeriod]] = Field(alias="periods", serialization_alias="periods", default=None)
     weekday_text: Optional[List[str]] = Field(alias="weekdayDescriptions", serialization_alias="weekday_text", default=None)
-    secondary_hours: Optional[List[Dict[str, Any]]] = Field(alias="secondaryHours", serialization_alias="secondary_hours", default=None)
-    type: Optional[str] = Field(alias="type", serialization_alias="type", default=None)
+    secondary_hours_type: Optional[str] = Field(alias="secondaryHoursType", serialization_alias="secondary_hours_type", default=None)
+    next_open_time: Optional[str] = Field(alias="nextOpenTime", serialization_alias="next_open_time", default=None)
 
 class PlusCode(BaseModel):
     global_code: Optional[str] = Field(alias="globalCode", serialization_alias="global_code", default=None)
@@ -82,28 +83,26 @@ class PriceLevel(BaseModel):
     level: Optional[int] = None
     price_range: Optional[str] = None
 
-class DisplayName(BaseModel):
-    text: str
-    languageCode: Optional[str] = None
-
 class Place(BaseModel):
     id: str
-    display_name: DisplayName = Field(serialization_alias="display_name", alias="displayName")
+    display_name: Optional[str] = Field(serialization_alias="display_name", alias="displayName")
+    types: Optional[List[str]] = None
     formatted_address: Optional[str] = Field(alias="formattedAddress", serialization_alias="formattedAddress", default=None)
     location: Optional[Location] = None
     viewport: Optional[Viewport] = None
     rating: Optional[float] = None
+    international_phone_number: Optional[str] = Field(alias="internationalPhoneNumber", serialization_alias="international_phone_number", default=None)
     user_ratings_total: Optional[int] = Field(alias="userRatingCount", serialization_alias="user_ratings_total", default=None)
     editorial_summary: Optional[Dict[str, str]] = Field(alias="editorialSummary", serialization_alias="editorial_summary", default=None)
-    photos: Optional[List[Photo]] = None
     price_level: Optional[str] = Field(alias="priceLevel", serialization_alias="price_level", default=None)
-    opening_hours: Optional[PlaceOpeningHours] = None
+    price_range: Optional[Dict[str, Any]] = Field(alias="priceRange", serialization_alias="price_range", default=None)
+    photos: Optional[List[str]] = None
     website_uri: Optional[str] = Field(alias="websiteUri", serialization_alias="website_uri", default=None)
     icon_mask_base_uri: Optional[str] = Field(alias="iconMaskBaseUri", serialization_alias="icon_mask_base_uri", default=None)
     icon_background_color: Optional[str] = Field(alias="iconBackgroundColor", serialization_alias="icon_background_color", default=None)
     plus_code: Optional[PlusCode] = Field(alias="plusCode", serialization_alias="plus_code", default=None)
     current_opening_hours: Optional[PlaceOpeningHours] = Field(alias="currentOpeningHours", serialization_alias="current_opening_hours", default=None)
-    secondary_opening_hours: Optional[List[PlaceOpeningHours]] = Field(alias="secondaryOpeningHours", serialization_alias="secondary_opening_hours", default=None)
+    current_secondary_opening_hours: Optional[List[PlaceOpeningHours]] = Field(alias="currentSecondaryOpeningHours", serialization_alias="current_secondary_opening_hours", default=None)
     curbside_pickup: Optional[bool] = Field(alias="curbsidePickup", serialization_alias="curbside_pickup", default=None)
     delivery: Optional[bool] = Field(alias="delivery", serialization_alias="delivery", default=None)
     dine_in: Optional[bool] = Field(alias="dineIn", serialization_alias="dine_in", default=None)
@@ -114,7 +113,6 @@ class Place(BaseModel):
     takeout: Optional[bool] = Field(alias="takeout", serialization_alias="takeout", default=None)
     serves_vegetarian_food: Optional[bool] = Field(alias="servesVegetarianFood", serialization_alias="serves_vegetarian_food", default=None)
     reviews: Optional[List[Review]] = None
-    url: Optional[str] = None
 
     class Config:
         allow_population_by_alias = True
@@ -124,10 +122,12 @@ class PlaceSearchRequest(BaseModel):
     query: str
     place_type: Optional[str] = None
     location: Optional[str] = None
+    location_restriction: Optional[LocationRestriction] = None
     radius: float = 5000.0
-    fields: str = "places.id,places.displayName,places.formattedAddress,places.location,places.rating,places.editorialSummary,places.photos,places.priceLevel,places.websiteUri,places.iconMaskBaseUri,places.iconBackgroundColor,places.plusCode,places.currentOpeningHours,places.curbsidePickup,places.delivery,places.dineIn,places.reservable,places.servesBreakfast,places.servesLunch,places.servesDinner,places.takeout,places.servesVegetarianFood,places.reviews,places.userRatingCount"
+    fields: str = "places.id,places.displayName,places.formattedAddress,places.location,places.rating,places.editorialSummary,places.photos,places.priceLevel,places.priceRange,places.websiteUri,places.iconMaskBaseUri,places.iconBackgroundColor,places.plusCode,places.currentOpeningHours,places.currentSecondaryOpeningHours,places.curbsidePickup,places.delivery,places.dineIn,places.reservable,places.servesBreakfast,places.servesLunch,places.servesDinner,places.takeout,places.servesVegetarianFood,places.reviews,places.userRatingCount,places.types,places.viewport,places.internationalPhoneNumber"
     language_code: Optional[str] = None
     region_code: Optional[str] = None
+    page_size: int = 1
 
 class PlacesSearchResponse(BaseModel):
     places: List[Place]
@@ -178,6 +178,8 @@ async def search_places(request: PlaceSearchRequest):
     # Add included type if provided
     if request.place_type:
         request_data["includedType"] = request.place_type
+
+    request_data["pageSize"] = request.page_size
     
     async with await get_client() as client:
         try:
@@ -197,6 +199,26 @@ async def search_places(request: PlaceSearchRequest):
             logger.debug("Decoding places API response")
             response_data = response.json()
             logger.debug(f"Response data: {response_data}")
+
+            if "places" in response_data:
+                for place in response_data["places"]:
+                    if "displayName" in place:
+                        place["displayName"] = place["displayName"].get("text")
+                    if "photos" in place:
+                        # Create a list of photo fetch coroutines
+                        photo_tasks = [get_place_photo(photo.get("name"), place.get("id"), photo.get("widthPx"), photo.get("heightPx"), True) for photo in place["photos"]]
+                        # Fetch all photos in parallel
+                        if photo_tasks:
+                            photo_results = await asyncio.gather(*photo_tasks, return_exceptions=True)
+                            # Process results and filter out any errors
+                            processed_photos = []
+                            for i, result in enumerate(photo_results):
+                                if isinstance(result, Exception):
+                                    logger.error(f"Error fetching photo {i}: {result}")
+                                else:
+                                    if result.get("photoUri"):
+                                        processed_photos.append(result.get("photoUri"))
+                            place["photos"] = processed_photos
             
             # Transform response to match our model
             return response_data
@@ -288,6 +310,7 @@ async def get_place_photo(photo_name: str, place_id: str, maxWidthPx: int = None
     
     # Create query parameters
     params = {}
+    params["key"] = API_KEY
     if maxWidthPx:
         params["maxWidthPx"] = maxWidthPx
     if maxHeightPx:
@@ -296,7 +319,7 @@ async def get_place_photo(photo_name: str, place_id: str, maxWidthPx: int = None
     async with await get_client() as client:
         try:
             # Use the v1 photos endpoint with the photo name
-            url = f"{BASE_URL}/places/{place_id}/photos/{photo_name}/media"
+            url = f"{BASE_URL}/{photo_name}/media"
             
             headers = get_auth_header()
             headers["X-Goog-FieldMask"] = "*"
