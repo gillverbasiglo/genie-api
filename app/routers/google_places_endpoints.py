@@ -1,14 +1,13 @@
 # places_routes.py
 import httpx
 import logging
-import os
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from typing import Optional, List, Dict, Any, Union
+from typing import Optional, List, Dict, Any
 
-from .common import get_current_user
-from .config import settings
+from app.common import get_current_user
+from ..config import settings
 
 
 # Configure logging
