@@ -13,15 +13,15 @@ from openai import OpenAI, OpenAIError
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from .init_db import get_db
 from .common import app, get_current_user
 from .init_db import get_db
 from .config import settings
 from .database import engine, Base, SessionLocal
-from .google_places_endpoints import router as GooglePlacesEndpoints
+from .routers.google_places_endpoints import router as GooglePlacesEndpoints
 from .identity_credentials import WorkloadIdentityCredentials
-from .models import InvitationCode, InviteCodeCreate
-from .trip_advisor_endpoints import router as TripAdvisorEndpoints
-from .routers import invitation
+from .routers.trip_advisor_endpoints import router as TripAdvisorEndpoints
+from .routers.invitations_endpoints import router as InvitationsEndpoints
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,7 @@ cache = TTLCache(maxsize=1, ttl=3600)
 # Include the TripAdvisor and Google Places routers
 app.include_router(TripAdvisorEndpoints)
 app.include_router(GooglePlacesEndpoints)
-app.include_router(invitation.router)
+app.include_router(InvitationsEndpoints)
 
 async def create_tables():
     async with engine.begin() as conn:
@@ -40,38 +40,6 @@ async def create_tables():
 class TextRequest(BaseModel):
     text: str
     provider: str = "groq"
-
-@app.post("/validate-code/", dependencies=[Depends(get_current_user)])
-async def validate_code(code: str, db: Session = Depends(get_db)):
-    db_code = db.query(InvitationCode).filter(InvitationCode.code == code).first()
-    if not db_code:
-        raise HTTPException(status_code=404, detail="Invite Code not found")
-    if db_code.used_by:
-        raise HTTPException(status_code=400, detail="Invite Code is already used")
-    if db_code.expires_at and db_code.expires_at < datetime.utcnow():
-        raise HTTPException(status_code=400, detail="Invite Code has expired")
-    if not db_code.is_active:
-        raise HTTPException(status_code=400, detail="Invite Code is not active")
-    return {"message": "Invite Code is valid"}
-
-@app.post("/create-invite-code/")
-def create_invite_code(invite_code: InviteCodeCreate, db: Session = Depends(get_db), dependencies=[Depends(get_current_user)]):
-    # Check if code already exists
-    db_code = db.query(InvitationCode).filter(InvitationCode.code == invite_code.code).first()
-    if db_code:
-        raise HTTPException(status_code=400, detail="Invitation code already exists")
-
-    new_code = InvitationCode(
-        code=invite_code.code,
-        expires_at=invite_code.expires_at,
-        is_active=invite_code.is_active
-    )
-
-    db.add(new_code)
-    db.commit()
-    db.refresh(new_code)
-
-    return {"message": "Invitation code created successfully", "code": new_code.code}
 
 @app.post("/process-text", dependencies=[Depends(get_current_user)], response_model=dict[str, str])
 async def process_text(

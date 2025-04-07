@@ -1,5 +1,7 @@
 from sqlalchemy import create_engine
+from .database import engine, Base
 from sqlalchemy.orm import sessionmaker
+from .database import SessionLocal
 from .config import settings
 from .models.User import User
 from .models.Invitation import Invitation
@@ -28,4 +30,11 @@ def init_db():
 if __name__ == "__main__":
     print("Creating database tables...")
     init_db()
-    print("Database tables created successfully!")
+    print("Database tables created successfully!") 
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
