@@ -14,12 +14,14 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from .common import app, get_current_user
+from .init_db import get_db
 from .config import settings
 from .database import engine, Base, SessionLocal
 from .google_places_endpoints import router as GooglePlacesEndpoints
 from .identity_credentials import WorkloadIdentityCredentials
 from .models import InvitationCode, InviteCodeCreate
 from .trip_advisor_endpoints import router as TripAdvisorEndpoints
+from .routers import invitation
 
 logger = logging.getLogger(__name__)
 
@@ -29,17 +31,11 @@ cache = TTLCache(maxsize=1, ttl=3600)
 # Include the TripAdvisor and Google Places routers
 app.include_router(TripAdvisorEndpoints)
 app.include_router(GooglePlacesEndpoints)
+app.include_router(invitation.router)
 
 async def create_tables():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 class TextRequest(BaseModel):
     text: str
