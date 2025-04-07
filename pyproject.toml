@@ -18,6 +18,7 @@ dependencies = [
     "python-jose>=3.4.0",
     "requests>=2.32.3",
     "sqlalchemy>=2.0.39",
+    "tavily-python>=0.5.4",
     "uvicorn>=0.34.0",
 ]
 
