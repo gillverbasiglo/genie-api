@@ -21,8 +21,8 @@ from .database import engine, Base, SessionLocal
 from .routers.google_places_endpoints import router as GooglePlacesEndpoints
 from .identity_credentials import WorkloadIdentityCredentials
 from .routers.trip_advisor_endpoints import router as TripAdvisorEndpoints
-from .routers.invitation import router as InviteUserEndpoints
-from .routers.invitations_endpoints import router as InvitationsEndpoints
+from .routers.invitation_endpoints import router as InvitationsEndpoints
+from .routers.invite_code_endpoints import router as InviteCodeEndpoints
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +33,8 @@ cache = TTLCache(maxsize=1, ttl=3600)
 app.include_router(TripAdvisorEndpoints)
 app.include_router(GooglePlacesEndpoints)
 app.include_router(InvitationsEndpoints)
-app.include_router(InviteUserEndpoints)
+app.include_router(InviteCodeEndpoints)
+
 async def create_tables():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

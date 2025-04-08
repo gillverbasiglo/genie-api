@@ -56,9 +56,9 @@ async def send_invitation(
     db: Session = Depends(get_db)
 ):
     # Check if user exists
-    # inviter = db.query(User).filter(User.id == current_user["uid"]).first()
-    # if not inviter:
-    #     raise HTTPException(status_code=404, detail="User not found")
+    inviter = db.query(User).filter(User.id == current_user["uid"]).first()
+    if not inviter:
+        raise HTTPException(status_code=404, detail="User not found")
 
     new_invitations = []
     existing_phones = []
