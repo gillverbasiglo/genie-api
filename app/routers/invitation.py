@@ -115,15 +115,28 @@ async def check_contacts(
     users = db.query(User).filter(User.phone_number.in_(phone_numbers)).all()
     user_map = {user.phone_number: user for user in users}
     
+    # Query pending invitations for these phone numbers
+    pending_invites = db.query(Invitation).filter(
+        Invitation.inviter_id == current_user["uid"],
+        Invitation.invitee_phone.in_(phone_numbers),
+        Invitation.status == "pending"
+    ).all()
+    invite_map = {invite.invitee_phone: invite for invite in pending_invites}
+    
     # Create response for each phone number
     response = []
     for phone in phone_numbers:
         user = user_map.get(phone)
+        invite = invite_map.get(phone)
+        
         response.append(ContactCheckResponse(
             phone_number=phone,
             is_registered=user is not None,
+            is_invited=invite is not None,
             user_id=user.id if user else None,
-            display_name=user.display_name if user else None
+            display_name=user.display_name if user else None,
+            invite_code=invite.invite_code if invite else None,
+            invited_at=invite.created_at if invite else None
         ))
     
     return response

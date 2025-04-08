@@ -23,5 +23,11 @@ class InvitationResponse(BaseModel):
 class ContactCheckResponse(BaseModel):
     phone_number: str
     is_registered: bool
+    is_invited: bool
     user_id: Optional[str]
-    display_name: Optional[str] 
+    display_name: Optional[str]
+    invite_code: Optional[str]
+    invited_at: Optional[datetime]
+
+    class Config:
+        from_attributes = True 

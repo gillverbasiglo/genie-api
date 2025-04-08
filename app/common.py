@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
-    global firebase_app
+    firebase_app = None
     
     # Initialize Database Tables
     inspector = inspect(engine)
@@ -46,8 +46,9 @@ async def lifespan(app: FastAPI):
     yield
     
     # Shutdown
-    if firebase_app:
+    if firebase_app is not None:
         firebase_app.delete()
+        logger.info("Firebase app deleted successfully")
 
 app = FastAPI(lifespan=lifespan)
 security = HTTPBearer()
