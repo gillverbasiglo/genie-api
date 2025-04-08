@@ -14,6 +14,7 @@ from openai import OpenAI, OpenAIError
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from tavily import TavilyClient
+from typing import Optional, List
 
 from .init_db import get_db
 from .common import app, get_current_user
@@ -129,6 +130,10 @@ async def protected_route(current_user: dict = Depends(get_current_user)):
 class WebSearchRequest(BaseModel):
     query: str
     provider: str = "tavily"
+    num_results: Optional[int] = 10
+    use_autoprompt: bool = True
+    include_domains: Optional[List[str]] = ['youtube.com']
+    type: Optional[str] = 'neural'
 
 @app.post("/web-search", dependencies=[Depends(get_current_user)], response_model=None)
 async def web_search(request: WebSearchRequest):
@@ -151,7 +156,14 @@ async def web_search(request: WebSearchRequest):
             return results
         elif request.provider == "exa":
             client = Exa(settings.exa_api_key.get_secret_value())
-            results = client.search_and_contents(request.query, text=True)
+            results = client.search_and_contents(
+                request.query, 
+                text=True, 
+                num_results=request.num_results,
+                use_autoprompt=request.use_autoprompt,
+                include_domains=request.include_domains,
+                type=request.type
+            )
             return results
         else:
             logger.error(f"Invalid provider: {request.provider}")
