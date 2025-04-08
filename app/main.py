@@ -130,8 +130,10 @@ async def protected_route(current_user: dict = Depends(get_current_user)):
 class WebSearchRequest(BaseModel):
     query: str
     provider: str = "tavily"
-    num_results: Optional[int] = 10
-    use_autoprompt: bool = True
+    include_answer: bool = True # Tavily parameter
+    max_results: Optional[int] = 10 # Tavily and Exa parameter
+    search_depth: Optional[str] = 'advanced' # Tavily parameter. Options: 'basic', 'advanced', 'deep'
+    use_autoprompt: bool = True # Exa parameter
     include_domains: Optional[List[str]] = ['youtube.com']
     type: Optional[str] = 'neural'
 
@@ -152,14 +154,19 @@ async def web_search(request: WebSearchRequest):
     try:
         if request.provider == "tavily":
             client = TavilyClient(settings.tavily_api_key.get_secret_value())
-            results = client.search(request.query)
+            results = client.search(
+                request.query,
+                include_answer=request.include_answer,
+                max_results=request.max_results,
+                search_depth=request.search_depth
+            )
             return results
         elif request.provider == "exa":
             client = Exa(settings.exa_api_key.get_secret_value())
             results = client.search_and_contents(
                 request.query, 
                 text=True, 
-                num_results=request.num_results,
+                num_results=request.max_results,
                 use_autoprompt=request.use_autoprompt,
                 include_domains=request.include_domains,
                 type=request.type
