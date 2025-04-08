@@ -14,7 +14,7 @@ from openai import OpenAI, OpenAIError
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from tavily import TavilyClient
-from typing import Optional, List
+from typing import Optional, List, Literal
 
 from .init_db import get_db
 from .common import app, get_current_user
@@ -137,7 +137,7 @@ class WebSearchRequest(BaseModel):
     include_domains: Optional[List[str]] = ['youtube.com']
     type: Optional[str] = 'neural'
 
-@app.post("/web-search", response_model=None)
+@app.post("/web-search", dependencies=[Depends(get_current_user)], response_model=None)
 async def web_search(request: WebSearchRequest):
     """
     Perform a web search using the specified provider.
