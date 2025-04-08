@@ -34,11 +34,13 @@ async def lifespan(app: FastAPI):
             cred = credentials.ApplicationDefault()
             firebase_app = initialize_app(
                 credential=cred,
-                options={'projectId': 'genia-ai-19a34'}
+                options={
+                    'projectId': 'genia-ai-19a34'
+                }
             )
             logger.info("Firebase initialized successfully")
         except Exception as e:
-            logger.exception("Error initializing Firebase")
+            logger.exception(f"Error initializing Firebase: {e}")
             raise e
     else:
         logger.info("Running in development mode - skipping Firebase initialization")

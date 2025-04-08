@@ -16,3 +16,4 @@ class User(Base):
     # Relationships
     sent_invites = relationship("Invitation", back_populates="inviter", foreign_keys="Invitation.inviter_id")
     received_invite = relationship("Invitation", back_populates="invitee", foreign_keys="Invitation.invitee_id") 
+    
