@@ -7,11 +7,13 @@ import os
 
 from cachetools import cached, TTLCache
 from datetime import datetime
+from exa_py import Exa
 from fastapi import Depends, HTTPException, status
 from jose import jwt
 from openai import OpenAI, OpenAIError
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from tavily import TavilyClient
 
 from .init_db import get_db
 from .common import app, get_current_user
@@ -120,4 +122,44 @@ async def protected_route(current_user: dict = Depends(get_current_user)):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error retrieving user details: {str(e)}"
+        )
+
+class WebSearchRequest(BaseModel):
+    query: str
+    provider: str = "tavily"
+
+@app.post("/web-search", dependencies=[Depends(get_current_user)], response_model=None)
+async def web_search(request: WebSearchRequest):
+    """
+    Perform a web search using the specified provider.
+    
+    Args:
+        request: The web search request containing a query and provider
+        
+    Returns:
+        JSON containing the search results
+        
+    Raises:
+        HTTPException: When API authentication fails or service is unavailable
+    """
+    try:
+        if request.provider == "tavily":
+            client = TavilyClient(settings.tavily_api_key.get_secret_value())
+            results = client.search(request.query)
+            return results
+        elif request.provider == "exa":
+            client = Exa(settings.exa_api_key.get_secret_value())
+            results = client.search_and_contents(request.query, text=True)
+            return results
+        else:
+            logger.error(f"Invalid provider: {request.provider}")
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid provider"
+            )
+    except Exception as e:
+        logger.error(f"Error performing web search: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error performing web search: {str(e)}"
         )
