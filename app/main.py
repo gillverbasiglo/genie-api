@@ -132,12 +132,12 @@ class WebSearchRequest(BaseModel):
     provider: str = "tavily"
     include_answer: bool = True # Tavily parameter
     max_results: Optional[int] = 10 # Tavily and Exa parameter
-    search_depth: Optional[str] = 'advanced' # Tavily parameter. Options: 'basic', 'advanced', 'deep'
+    search_depth: Literal["basic", "advanced"] = 'advanced' # Tavily parameter
     use_autoprompt: bool = True # Exa parameter
     include_domains: Optional[List[str]] = ['youtube.com']
     type: Optional[str] = 'neural'
 
-@app.post("/web-search", dependencies=[Depends(get_current_user)], response_model=None)
+@app.post("/web-search", response_model=None)
 async def web_search(request: WebSearchRequest):
     """
     Perform a web search using the specified provider.
