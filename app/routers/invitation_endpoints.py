@@ -207,7 +207,7 @@ async def register_user(
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="User with this phone number or email already exists"
+            detail="User with this phone number or email already exists, or this user is currently logged in."
         )
     except Exception as e:
         db.rollback()
