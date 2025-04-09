@@ -1,15 +1,8 @@
-import firebase_admin
-import google.auth
-import json
 import logging
-import requests
-import os
 
-from cachetools import cached, TTLCache
-from datetime import datetime
+from cachetools import TTLCache
 from exa_py import Exa
 from fastapi import Depends, HTTPException, status
-from jose import jwt
 from openai import OpenAI, OpenAIError
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
