@@ -7,8 +7,6 @@ from sqlalchemy import inspect
 
 from app.config import settings
 from app.database import engine, Base
-from app.models.User import User
-from app.models.Invitation import Invitation
 
 logger = logging.getLogger(__name__)
 

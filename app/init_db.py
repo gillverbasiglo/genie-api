@@ -4,7 +4,7 @@ from sqlalchemy.orm import sessionmaker
 from .database import SessionLocal
 from .config import settings
 from .models.User import User
-from .models.Invitation import Invitation
+from .models.invitation import Invitation
 
 def get_db():
     db = SessionLocal()
@@ -16,7 +16,8 @@ def get_db():
 def init_db():
     # Import all models here
     from .models.User import Base
-    from .models.Invitation import Base
+    from .models.invitation import Base
+    from .models.invitation_code import Base
     
     # Create all tables
     Base.metadata.create_all(bind=engine)
