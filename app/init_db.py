@@ -6,12 +6,6 @@ from .config import settings
 from .models.User import User
 from .models.Invitation import Invitation
 
-# PostgreSQL connection string
-SQLALCHEMY_DATABASE_URL = f"postgresql://{settings.db_username}:{settings.db_password}@{settings.host}:{settings.port}/{settings.database}"
-
-engine = create_engine(SQLALCHEMY_DATABASE_URL)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
 def get_db():
     db = SessionLocal()
     try:

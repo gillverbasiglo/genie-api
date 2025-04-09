@@ -31,3 +31,4 @@ class ContactCheckResponse(BaseModel):
 
     class Config:
         from_attributes = True 
+        
