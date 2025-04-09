@@ -1,35 +1,30 @@
 import logging
-from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from firebase_admin import initialize_app, credentials, auth
-from sqlalchemy import inspect
+from firebase_admin import initialize_app, auth
 
 from app.config import settings
 from app.database import engine, Base
 
+app = FastAPI()
+security = HTTPBearer()
+# Initialize Firebase
+firebase_app = None
+
 logger = logging.getLogger(__name__)
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Startup
-    firebase_app = None
-    
-    # Initialize Database Tables
-    inspector = inspect(engine)
-    existing_tables = inspector.get_table_names()
-    
-    if not all(table in existing_tables for table in ['users', 'invitations']):
-        logger.info("Creating database tables...")
-        Base.metadata.create_all(bind=engine)
-        logger.info("Database tables created successfully!")
-    else:
-        logger.info("Database tables already exist")
-
-    # Initialize Firebase (existing code)
+@app.on_event("startup")
+async def startup_event():
+    global firebase_app
     if settings.environment == "production":
         try:
-            cred = credentials.ApplicationDefault()
+            # Import Firebase credentials
+            from firebase_admin import credentials as fb_credentials
+            
+            # Create a credential object
+            cred = fb_credentials.ApplicationDefault()
+            
+            # Initialize Firebase with explicit credentials
             firebase_app = initialize_app(
                 credential=cred,
                 options={
@@ -38,20 +33,10 @@ async def lifespan(app: FastAPI):
             )
             logger.info("Firebase initialized successfully")
         except Exception as e:
-            logger.exception(f"Error initializing Firebase: {e}")
+            logger.exception(f"Error initializing Firebase")
             raise e
     else:
         logger.info("Running in development mode - skipping Firebase initialization")
-    
-    yield
-    
-    # Shutdown
-    if firebase_app is not None:
-        firebase_app.delete()
-        logger.info("Firebase app deleted successfully")
-
-app = FastAPI(lifespan=lifespan)
-security = HTTPBearer()
 
 # Dependency to get current user from token
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):

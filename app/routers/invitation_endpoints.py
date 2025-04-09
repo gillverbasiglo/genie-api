@@ -10,7 +10,7 @@ from typing import List, Optional
 from pydantic import BaseModel
 from datetime import datetime, timezone
 
-from ..init_db import get_db
+from ..database import get_db
 from ..models.User import User
 from ..models.invitation import Invitation
 from ..schemas.invitation import InvitationResponse, ContactCheckResponse

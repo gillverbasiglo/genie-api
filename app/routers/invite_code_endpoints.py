@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from datetime import datetime
 from sqlalchemy.orm import Session
 from ..models import InvitationCode, InviteCodeCreate
-from ..init_db import get_db
+from ..database import get_db
 
 from ..common import get_current_user
 

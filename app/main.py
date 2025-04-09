@@ -17,7 +17,6 @@ from tavily import TavilyClient
 from typing import Optional, List, Literal
 
 from .common import app, get_current_user
-from .init_db import get_db
 from .config import settings
 from .database import engine, Base, SessionLocal
 from .routers.google_places_endpoints import router as GooglePlacesEndpoints
