@@ -18,22 +18,25 @@ from typing import Optional, List, Literal
 
 from .init_db import get_db
 from .common import app, get_current_user
+from .init_db import get_db
 from .config import settings
 from .database import engine, Base, SessionLocal
 from .routers.google_places_endpoints import router as GooglePlacesEndpoints
 from .identity_credentials import WorkloadIdentityCredentials
 from .routers.trip_advisor_endpoints import router as TripAdvisorEndpoints
-from .routers.invitations_endpoints import router as InvitationsEndpoints
+from .routers.invitation_endpoints import router as InvitationsEndpoints
+from .routers.invite_code_endpoints import router as InviteCodeEndpoints
 from .routers.apple_site_association_endpoint import router as AppleSiteAssociationEndpoint
 logger = logging.getLogger(__name__)
 
 # Cache the JWKS for 1 hour to avoid fetching it on every request
 cache = TTLCache(maxsize=1, ttl=3600)
 
-# Include the TripAdvisor and Google Places routers
+# Include routers
 app.include_router(TripAdvisorEndpoints)
 app.include_router(GooglePlacesEndpoints)
 app.include_router(InvitationsEndpoints)
+app.include_router(InviteCodeEndpoints)
 app.include_router(AppleSiteAssociationEndpoint)
 
 async def create_tables():

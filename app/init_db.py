@@ -1,8 +1,23 @@
+from sqlalchemy import create_engine
 from .database import engine, Base
-from .models.InvitationCode import InvitationCode
+from sqlalchemy.orm import sessionmaker
 from .database import SessionLocal
+from .config import settings
+from .models.User import User
+from .models.Invitation import Invitation
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 def init_db():
+    # Import all models here
+    from .models.User import Base
+    from .models.Invitation import Base
+    
     # Create all tables
     Base.metadata.create_all(bind=engine)
 
