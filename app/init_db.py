@@ -14,10 +14,6 @@ def get_db():
         db.close()
 
 def init_db():
-    # Import all models here
-    from .models.User import Base
-    from .models.invitation import Base
-    from .models.invitation_code import Base
     
     # Create all tables
     Base.metadata.create_all(bind=engine)
