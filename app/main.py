@@ -18,6 +18,8 @@ from .routers.trip_advisor_endpoints import router as TripAdvisorEndpoints
 from .routers.invitation_endpoints import router as InvitationsEndpoints
 from .routers.invite_code_endpoints import router as InviteCodeEndpoints
 from .routers.apple_site_association_endpoint import router as AppleSiteAssociationEndpoint
+from .models.User import User
+
 logger = logging.getLogger(__name__)
 
 # Cache the JWKS for 1 hour to avoid fetching it on every request
@@ -37,6 +39,29 @@ async def create_tables():
 class TextRequest(BaseModel):
     text: str
     provider: str = "groq"
+
+@app.get("/me")
+async def get_current_user_info(
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    # Get user details from database
+    user = db.query(User).filter(User.id == current_user["uid"]).first()
+    
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found in database"
+        )
+
+    return {
+        "id": user.id,
+        "phone_number": user.phone_number,
+        "email": user.email,
+        "display_name": user.display_name,
+        "created_at": user.created_at,
+        "invited_by": user.invited_by
+    }
 
 @app.post("/process-text", dependencies=[Depends(get_current_user)], response_model=dict[str, str])
 async def process_text(
