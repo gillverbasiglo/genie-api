@@ -11,14 +11,15 @@ from typing import Optional, List, Literal
 
 from .common import app, get_current_user
 from .config import settings
-from .database import engine, Base, SessionLocal
+from .database import engine, Base
 from .routers.google_places_endpoints import router as GooglePlacesEndpoints
 from .identity_credentials import WorkloadIdentityCredentials
 from .routers.trip_advisor_endpoints import router as TripAdvisorEndpoints
 from .routers.invitation_endpoints import router as InvitationsEndpoints
 from .routers.invite_code_endpoints import router as InviteCodeEndpoints
 from .routers.apple_site_association_endpoint import router as AppleSiteAssociationEndpoint
-from .models.User import User
+from .models.user import User
+from .database import get_db
 
 logger = logging.getLogger(__name__)
 
