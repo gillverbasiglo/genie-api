@@ -6,9 +6,9 @@ from firebase_admin import initialize_app, auth
 from typing import Dict, List
 
 from app.config import settings
-from app.database import engine, Base, get_db
+from app.database import get_db, init_db
 from sqlalchemy.orm import Session
-from .models import User
+from .models.user import User
 
 app = FastAPI()
 security = HTTPBearer()
@@ -108,6 +108,7 @@ async def websocket_endpoint(
 
 @app.on_event("startup")
 async def startup_event():
+    init_db()
     global firebase_app
     if settings.environment == "production":
         try:

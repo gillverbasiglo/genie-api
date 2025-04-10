@@ -12,8 +12,8 @@ class NotificationCreate(NotificationBase):
     user_id: int
 
 class NotificationResponse(NotificationBase):
-    id: int
-    user_id: int
+    id: str
+    user_id: str
     is_read: bool
     created_at: datetime
     

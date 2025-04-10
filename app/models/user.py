@@ -22,4 +22,3 @@ class User(Base):
     received_shares = relationship("Share", foreign_keys="Share.to_user_id", back_populates="to_user")
     notifications = relationship("Notification", back_populates="user")
     
-    

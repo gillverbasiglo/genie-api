@@ -7,11 +7,11 @@ class DeviceTokenBase(BaseModel):
     platform: str
 
 class DeviceTokenCreate(DeviceTokenBase):
-    user_id: int
+    user_id: str
 
 class DeviceTokenResponse(DeviceTokenBase):
-    id: int
-    user_id: int
+    id: str
+    user_id: str
     is_active: bool
     created_at: datetime
     

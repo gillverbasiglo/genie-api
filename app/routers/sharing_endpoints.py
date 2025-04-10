@@ -6,14 +6,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import User
+from ..models.user import User
 from ..models.device_token import DeviceToken
 from ..models.shares import Share
 from ..models.notifications import Notification
 from ..schemas.shares import ShareResponse, ShareCreate
 from ..common import get_current_user
-from ..common import connection_manager as WebSocketConnectManager
-from ..common import send
+from ..common import manager as WebSocketConnectManager
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -30,9 +29,9 @@ async def share_content(
     ):
 
     # Check if user exists
-    from_user = db.query(User).filter(User.id == current_user["uid"]).first()
+    from_user = current_user
     if not from_user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail="Sharing User not found")
 
     to_user = db.query(User).filter(User.id == share_data.to_user_id).first()
     
@@ -41,7 +40,7 @@ async def share_content(
     
     # Create share record
     share = Share(
-        from_user_id=share_data.from_user_id,
+        from_user_id=from_user['uid'],
         to_user_id=share_data.to_user_id,
         content_id=share_data.content_id,
         content_type=share_data.content_type,
@@ -55,12 +54,12 @@ async def share_content(
     notification = Notification(
         user_id=share_data.to_user_id,
         type="share",
-        title=f"{from_user.username} shared content with you",
+        title=f"{from_user.get('display_name', 'Someone')} shared content with you",
         message=share_data.message,
         data=json.dumps({
             "content_id": share_data.content_id,
             "content_type": share_data.content_type,
-            "from_user_id": share_data.from_user_id,
+            "from_user_id": from_user['uid'],
             "share_id": share.id
         }),
         is_read=False
@@ -88,7 +87,7 @@ async def share_content(
         DeviceToken.platform == "ios"
     ).all()
     
-    if device_tokens:
-        asyncio.create_task(send_push_notifications(device_tokens, notification))
+    # if device_tokens:
+        # asyncio.create_task(send_push_notifications(device_tokens, notification))
     
     return share

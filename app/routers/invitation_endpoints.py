@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from datetime import datetime, timezone
 
 from ..database import get_db
-from ..models.User import User
+from ..models.user import User
 from ..models.invitation import Invitation
 from ..schemas.invitation import InvitationResponse, ContactCheckResponse
 from ..common import get_current_user
