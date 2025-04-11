@@ -213,3 +213,25 @@ async def web_search(request: WebSearchRequest):
             status_code=500,
             detail=f"Error performing web search: {str(e)}"
         )
+
+class UpdateArchetypesAndKeywordsRequest(BaseModel):
+    archetypes: List[str]
+    keywords: List[str]
+
+@app.post("/update-archetypes-and-keywords", dependencies=[Depends(get_current_user)], response_model=None)
+async def update_archetypes_and_keywords(request: UpdateArchetypesAndKeywordsRequest, db: Session = Depends(get_db)):
+    stmt = select(User).where(User.id == current_user["uid"])
+    user = db.execute(stmt).scalar_one_or_none()
+    if user is None:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found"
+        )
+
+    user.archetypes = request.archetypes
+    user.keywords = request.keywords
+    db.commit()
+    db.refresh(user)
+
+    return Response(status_code=204)
+
