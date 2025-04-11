@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 
 from ..init_db import get_db
 from ..models.User import User
-from ..models.Invitation import Invitation
+from ..models.invitation import Invitation
 from ..schemas.invitation import InvitationResponse, ContactCheckResponse
 from ..common import get_current_user
 

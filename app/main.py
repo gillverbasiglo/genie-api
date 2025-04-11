@@ -16,7 +16,6 @@ from sqlalchemy.orm import Session
 from tavily import TavilyClient
 from typing import Optional, List, Literal
 
-from .init_db import get_db
 from .common import app, get_current_user
 from .init_db import get_db
 from .config import settings

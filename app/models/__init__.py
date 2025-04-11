@@ -1,4 +1,4 @@
-from .InvitationCode import InvitationCode
-from .InviteCodeCreate import InviteCodeCreate
+from .invitation_code import InvitationCode
+from .invite_code_create import InviteCodeCreate
 
-__all__ = ["InvitationCode", "InviteCodeCreate"]
+__all__ = ["invitation_code", "invite_code_create"]
