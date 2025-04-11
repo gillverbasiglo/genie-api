@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from datetime import datetime, timezone
 
 from ..init_db import get_db
-from app.models.user import User, Invitation
+from app.models import User, Invitation
 from ..schemas.invitation import InvitationResponse, ContactCheckResponse
 from ..common import get_current_user
 
