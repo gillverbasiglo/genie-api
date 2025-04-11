@@ -14,17 +14,6 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     # Startup
     firebase_app = None
-    
-    # Initialize Database Tables
-    inspector = inspect(engine)
-    existing_tables = inspector.get_table_names()
-    
-    if not all(table in existing_tables for table in ['users', 'invitations']):
-        logger.info("Creating database tables...")
-        Base.metadata.create_all(bind=engine)
-        logger.info("Database tables created successfully!")
-    else:
-        logger.info("Database tables already exist")
 
     # Initialize Firebase (existing code)
     if settings.environment == "production":
