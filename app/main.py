@@ -27,7 +27,7 @@ from .routers.trip_advisor_endpoints import router as TripAdvisorEndpoints
 from .routers.invitation_endpoints import router as InvitationsEndpoints
 from .routers.invite_code_endpoints import router as InviteCodeEndpoints
 from .routers.apple_site_association_endpoint import router as AppleSiteAssociationEndpoint
-from .models.User import User
+from app.models import User
 
 logger = logging.getLogger(__name__)
 
