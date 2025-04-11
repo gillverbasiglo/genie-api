@@ -13,6 +13,7 @@ from jose import jwt
 from openai import OpenAI, OpenAIError
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from sqlalchemy import select
 from tavily import TavilyClient
 from typing import Optional, List, Literal
 
@@ -54,9 +55,10 @@ async def get_current_user_info(
     db: Session = Depends(get_db)
 ):
     # Get user details from database
-    user = db.query(User).filter(User.id == current_user["uid"]).first()
+    stmt = select(User).where(User.id == current_user["uid"])
+    user = db.execute(stmt).scalar_one_or_none()
     
-    if not user:
+    if user is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found in database"
