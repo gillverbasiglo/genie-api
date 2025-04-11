@@ -70,7 +70,9 @@ async def get_current_user_info(
         "email": user.email,
         "display_name": user.display_name,
         "created_at": user.created_at,
-        "invited_by": user.invited_by
+        "invited_by": user.invited_by,
+        "archetypes": user.archetypes,
+        "keywords": user.keywords
     }
 
 @app.post("/process-text", dependencies=[Depends(get_current_user)], response_model=dict[str, str])
