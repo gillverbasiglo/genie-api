@@ -41,9 +41,15 @@ app.include_router(InvitationsEndpoints)
 app.include_router(InviteCodeEndpoints)
 app.include_router(AppleSiteAssociationEndpoint)
 
-async def create_tables():
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+# Global clients
+groq_client = OpenAI(
+    base_url="https://api.groq.com/openai/v1",
+    api_key=settings.groq_api_key.get_secret_value()
+)
+
+openai_client = OpenAI(
+    api_key=settings.openai_api_key.get_secret_value()
+)
 
 class TextRequest(BaseModel):
     text: str
@@ -75,7 +81,7 @@ async def get_current_user_info(
         "keywords": user.keywords
     }
 
-@app.post("/process-text", dependencies=[Depends(get_current_user)], response_model=dict[str, str])
+@app.post("/process-text", dependencies=[Depends(get_current_user)])
 async def process_text(
     request: TextRequest
 ) -> dict[str, str]:
@@ -93,10 +99,7 @@ async def process_text(
     """
     try:
         if request.provider == "groq":
-            client = OpenAI(
-                base_url="https://api.groq.com/openai/v1",
-                api_key=settings.groq_api_key.get_secret_value()
-            )
+            client = groq_client
 
             response = client.chat.completions.create(
                 model="llama-3.1-8b-instant",
@@ -105,12 +108,10 @@ async def process_text(
                 ]
             )
         elif request.provider == "openai":
-            client = OpenAI(
-                api_key=settings.openai_api_key.get_secret_value()
-            )
+            client = openai_client
 
             response = client.chat.completions.create(
-                model="gpt-4o-mini",
+                model="gpt-3.5-turbo",
                 messages=[
                     {"role": "user", "content": request.text}
                 ]
