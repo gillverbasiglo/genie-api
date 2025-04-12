@@ -49,6 +49,11 @@ class PendingInvitationResponse(BaseModel):
     invited_at: datetime
     status: str
 
+class UserUpdate(BaseModel):
+    phone_number: Optional[str] = None
+    email: Optional[str] = None
+    display_name: Optional[str] = None
+
 @router.post("/send", response_model=List[InvitationResponse])
 async def send_invitation(
     invitation_data: BulkInvitationCreate,
@@ -247,4 +252,51 @@ async def get_pending_invitations(
     ]
     
     return response 
+
+
+@router.patch("/update-profile", response_model=dict)
+async def update_user_profile(
+    user_data: UserUpdate,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    try:
+        # Get the current user
+        stmt = select(User).where(User.id == current_user["uid"])
+        user = db.execute(stmt).scalar_one_or_none()
+        
+        if user is None:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        # Update fields if provided
+        if user_data.phone_number is not None:
+            user.phone_number = user_data.phone_number
+        if user_data.email is not None:
+            user.email = user_data.email
+        if user_data.display_name is not None:
+            user.display_name = user_data.display_name
+
+        db.commit()
+        db.refresh(user)
+
+        return {
+            "message": "Profile updated successfully",
+            "id": user.id,
+            "phone_number": user.phone_number,
+            "email": user.email,
+            "display_name": user.display_name
+        }
+
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Phone number or email already exists"
+        )
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error updating profile: {str(e)}"
+        )
 
