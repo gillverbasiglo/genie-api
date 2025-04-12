@@ -59,8 +59,9 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
     if settings.environment != "production":
         logger.info("Development mode - skipping token verification")
         return {
-            "uid": "dev-user-123",
-            "email": "dev@example.com",
+            "uid": "xX51rMgKyUgHWIzj25Ewccq9gmt1",
+            "email": "fatehv@example.com",
+            "display_name": "Fateh",
             "name": "Development User"
         }
 
@@ -82,10 +83,10 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
 # WebSocket endpoint for real-time notifications
 @app.websocket("/ws/{user_id}")
 async def websocket_endpoint(
-    websocket: WebSocket, user_id: int, 
-    current_user: dict = Depends(get_current_user),
+    websocket: WebSocket,
+    user_id: str,
     db: Session = Depends(get_db)
-    ):
+):
     try:
         # Check if user exists
         user = db.query(User).filter(User.id == user_id).first()
@@ -102,8 +103,8 @@ async def websocket_endpoint(
         except WebSocketDisconnect:
             manager.disconnect(websocket, user_id)
     except Exception as e:
-        print(f"WebSocket error: {e}")
-        if user_id in manager.active_connections:
+        logger.error(f"WebSocket error: {e}")
+        if user_id in manager.active_connections.items:
             manager.disconnect(websocket, user_id)
 
 @app.on_event("startup")
@@ -131,4 +132,3 @@ async def startup_event():
             raise e
     else:
         logger.info("Running in development mode - skipping Firebase initialization")
-        

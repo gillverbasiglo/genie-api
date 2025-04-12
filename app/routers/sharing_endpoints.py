@@ -28,6 +28,7 @@ async def share_content(
     current_user: dict = Depends(get_current_user)
     ):
 
+    logger.debug("Entering in Share")
     # Check if user exists
     from_user = current_user
     if not from_user:
@@ -36,6 +37,7 @@ async def share_content(
     to_user = db.query(User).filter(User.id == share_data.to_user_id).first()
     
     if not from_user or not to_user:
+        logger.debug("Error in Share")
         raise HTTPException(status_code=404, detail="One or both users not found")
     
     # Create share record
@@ -49,7 +51,7 @@ async def share_content(
     db.add(share)
     db.commit()
     db.refresh(share)
-    
+    logger.debug("Added Share")
     # Create notification
     notification = Notification(
         user_id=share_data.to_user_id,
@@ -67,6 +69,7 @@ async def share_content(
     db.add(notification)
     db.commit()
     db.refresh(notification)
+    logger.debug("Added Notification")
     
     # Send real-time notification if user is connected
     notification_data = {
@@ -89,5 +92,5 @@ async def share_content(
     
     # if device_tokens:
         # asyncio.create_task(send_push_notifications(device_tokens, notification))
-    
+    logger.debug(f"Shared Data: {share}")
     return share
