@@ -6,6 +6,7 @@ from fastapi import Depends, HTTPException, status
 from openai import OpenAI, OpenAIError
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from sqlalchemy import select
 from tavily import TavilyClient
 from typing import Optional, List, Literal
 
@@ -17,8 +18,9 @@ from .routers.invitation_endpoints import router as InvitationsEndpoints
 from .routers.invite_code_endpoints import router as InviteCodeEndpoints
 from .routers.sharing_endpoints import router as SharingEndpoints
 from .routers.apple_site_association_endpoint import router as AppleSiteAssociationEndpoint
-from .models.user import User
 from .database import get_db
+from .routers.recommendations import router as RecommendationsEndpoints
+from app.models import User
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +34,16 @@ app.include_router(InvitationsEndpoints)
 app.include_router(InviteCodeEndpoints)
 app.include_router(AppleSiteAssociationEndpoint)
 app.include_router(SharingEndpoints)
+app.include_router(RecommendationsEndpoints)
+# Global clients
+groq_client = OpenAI(
+    base_url="https://api.groq.com/openai/v1",
+    api_key=settings.groq_api_key.get_secret_value()
+)
+
+openai_client = OpenAI(
+    api_key=settings.openai_api_key.get_secret_value()
+)
 
 class TextRequest(BaseModel):
     text: str
@@ -43,9 +55,10 @@ async def get_current_user_info(
     db: Session = Depends(get_db)
 ):
     # Get user details from database
-    user = db.query(User).filter(User.id == current_user["uid"]).first()
+    stmt = select(User).where(User.id == current_user["uid"])
+    user = db.execute(stmt).scalar_one_or_none()
     
-    if not user:
+    if user is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found in database"
@@ -57,10 +70,12 @@ async def get_current_user_info(
         "email": user.email,
         "display_name": user.display_name,
         "created_at": user.created_at,
-        "invited_by": user.invited_by
+        "invited_by": user.invited_by,
+        "archetypes": user.archetypes,
+        "keywords": user.keywords
     }
 
-@app.post("/process-text", dependencies=[Depends(get_current_user)], response_model=dict[str, str])
+@app.post("/process-text", dependencies=[Depends(get_current_user)])
 async def process_text(
     request: TextRequest
 ) -> dict[str, str]:
@@ -78,10 +93,7 @@ async def process_text(
     """
     try:
         if request.provider == "groq":
-            client = OpenAI(
-                base_url="https://api.groq.com/openai/v1",
-                api_key=settings.groq_api_key.get_secret_value()
-            )
+            client = groq_client
 
             response = client.chat.completions.create(
                 model="llama-3.1-8b-instant",
@@ -90,12 +102,10 @@ async def process_text(
                 ]
             )
         elif request.provider == "openai":
-            client = OpenAI(
-                api_key=settings.openai_api_key.get_secret_value()
-            )
+            client = openai_client
 
             response = client.chat.completions.create(
-                model="gpt-4o-mini",
+                model="gpt-3.5-turbo",
                 messages=[
                     {"role": "user", "content": request.text}
                 ]
@@ -200,3 +210,25 @@ async def web_search(request: WebSearchRequest):
             status_code=500,
             detail=f"Error performing web search: {str(e)}"
         )
+
+class UpdateArchetypesAndKeywordsRequest(BaseModel):
+    archetypes: List[str]
+    keywords: List[str]
+
+@app.post("/update-archetypes-and-keywords", dependencies=[Depends(get_current_user)], response_model=None)
+async def update_archetypes_and_keywords(request: UpdateArchetypesAndKeywordsRequest, db: Session = Depends(get_db)):
+    stmt = select(User).where(User.id == current_user["uid"])
+    user = db.execute(stmt).scalar_one_or_none()
+    if user is None:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found"
+        )
+
+    user.archetypes = request.archetypes
+    user.keywords = request.keywords
+    db.commit()
+    db.refresh(user)
+
+    return Response(status_code=204)
+

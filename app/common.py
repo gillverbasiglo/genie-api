@@ -49,6 +49,11 @@ class ConnectionManager:
             for connection in self.active_connections[user_id]:
                 await connection.send_json(message)
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    firebase_app = None
+
 manager = ConnectionManager()
 
 

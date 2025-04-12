@@ -4,15 +4,15 @@ import string
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
 from pydantic import BaseModel
 from datetime import datetime, timezone
 
-from ..database import get_db
-from ..models.user import User
-from ..models.invitation import Invitation
+from ..init_db import get_db
+from app.models import User, Invitation
 from ..schemas.invitation import InvitationResponse, ContactCheckResponse
 from ..common import get_current_user
 
@@ -56,18 +56,19 @@ async def send_invitation(
     db: Session = Depends(get_db)
 ):
     # Check if user exists
-    inviter = db.query(User).filter(User.id == current_user["uid"]).first()
-    if not inviter:
+    stmt = select(User).where(User.id == current_user["uid"])
+    inviter = db.execute(stmt).scalar_one_or_none()
+    if inviter is None:
         raise HTTPException(status_code=404, detail="User not found")
 
     new_invitations = []
     existing_phones = []
     # Check for existing invitations
     for invitee in invitation_data.invitees:
-        existing_invite = db.query(Invitation).filter(
+        existing_invite = db.execute(select(Invitation).where(
             Invitation.inviter_id == current_user["uid"],
             Invitation.invitee_phone == invitee.phone
-        ).first()
+        )).scalar_one_or_none()
         
         if existing_invite:
             existing_phones.append(invitee.phone)
@@ -75,7 +76,7 @@ async def send_invitation(
 
         # Generate a unique invite code
         invite_code = generate_invite_code()
-        while db.query(Invitation).filter(Invitation.invite_code == invite_code).first():
+        while db.execute(select(Invitation).where(Invitation.invite_code == invite_code)).scalar_one_or_none():
             invite_code = generate_invite_code()
 
         # Create new invitation
@@ -107,20 +108,23 @@ async def check_contacts(
     db: Session = Depends(get_db)
 ):
     # Check if user exists
-    inviter = db.query(User).filter(User.id == current_user["uid"]).first()
-    if not inviter:
+    stmt = select(User).where(User.id == current_user["uid"])
+    inviter = db.execute(stmt).scalar_one_or_none()
+    if inviter is None:
         raise HTTPException(status_code=404, detail="User not found")
     
     # Query users with these phone numbers
-    users = db.query(User).filter(User.phone_number.in_(phone_numbers)).all()
+    stmt = select(User).where(User.phone_number.in_(phone_numbers))
+    users = db.execute(stmt).scalars().all()
     user_map = {user.phone_number: user for user in users}
     
     # Query pending invitations for these phone numbers
-    pending_invites = db.query(Invitation).filter(
+    stmt = select(Invitation).where(
         Invitation.inviter_id == current_user["uid"],
         Invitation.invitee_phone.in_(phone_numbers),
         Invitation.status == "pending"
-    ).all()
+    )
+    pending_invites = db.execute(stmt).scalars().all()
     invite_map = {invite.invitee_phone: invite for invite in pending_invites}
     
     # Create response for each phone number
@@ -147,15 +151,15 @@ async def get_invitation_stats(
     db: Session = Depends(get_db)
 ):
     # Get total invitations sent
-    total_invites = db.query(Invitation).filter(
-        Invitation.inviter_id == current_user["uid"]
-    ).count()
+    stmt = select(func.count()).select_from(Invitation).where(Invitation.inviter_id == current_user["uid"])
+    total_invites = db.execute(stmt).scalar_one()
     
     # Get accepted invitations
-    accepted_invites = db.query(Invitation).filter(
+    stmt = select(func.count()).select_from(Invitation).where(
         Invitation.inviter_id == current_user["uid"],
         Invitation.status == "accepted"
-    ).count()
+    )
+    accepted_invites = db.execute(stmt).scalar_one()
     
     return {
         "total_invites": total_invites,
@@ -180,10 +184,10 @@ async def register_user(
 
         # If invite code is provided, link it to the invitation
         if user_data.invite_code:
-            invitation = db.query(Invitation).filter(
+            invitation = db.execute(select(Invitation).where(
                 Invitation.invite_code == user_data.invite_code,
                 Invitation.status == "pending"
-            ).first()
+            )).scalar_one_or_none()
 
             if invitation:
                 # Update invitation status
@@ -223,11 +227,12 @@ async def get_pending_invitations(
     db: Session = Depends(get_db)
 ):
     # Get all pending invitations for these phone numbers
-    pending_invites = db.query(Invitation).filter(
+    stmt = select(Invitation).where(
         Invitation.inviter_id == current_user["uid"],
         Invitation.invitee_phone.in_(phone_numbers),
         Invitation.status == "pending"
-    ).all()
+    )
+    pending_invites = db.execute(stmt).scalars().all()
     
     # Convert to response format
     response = [
