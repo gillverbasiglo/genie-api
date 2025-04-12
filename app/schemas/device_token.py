@@ -17,3 +17,4 @@ class DeviceTokenResponse(DeviceTokenBase):
     
     class Config:
         orm_mode = True
+        
