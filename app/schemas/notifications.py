@@ -19,4 +19,4 @@ class NotificationResponse(NotificationBase):
     
     class Config:
         orm_mode = True
-        
+                

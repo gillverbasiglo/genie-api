@@ -19,3 +19,4 @@ class ShareResponse(ShareBase):
     
     class Config:
         orm_mode = True
+        
