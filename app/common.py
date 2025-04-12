@@ -110,7 +110,7 @@ async def websocket_endpoint(
             manager.disconnect(websocket, user_id)
     except Exception as e:
         logger.error(f"WebSocket error: {e}")
-        if user_id in manager.active_connections.items:
+        for user_id in manager.active_connections:
             manager.disconnect(websocket, user_id)
 
 @app.on_event("startup")
