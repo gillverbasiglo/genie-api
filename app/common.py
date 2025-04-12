@@ -7,7 +7,8 @@ from firebase_admin import initialize_app, auth
 from typing import Dict, List
 
 from app.config import settings
-from app.database import get_db, init_db
+from app.database import init_db
+from .init_db import get_db
 from sqlalchemy.orm import Session
 from .models.user import User
 

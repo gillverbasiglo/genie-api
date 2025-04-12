@@ -18,7 +18,7 @@ from .routers.invitation_endpoints import router as InvitationsEndpoints
 from .routers.invite_code_endpoints import router as InviteCodeEndpoints
 from .routers.sharing_endpoints import router as SharingEndpoints
 from .routers.apple_site_association_endpoint import router as AppleSiteAssociationEndpoint
-from .database import get_db
+from .init_db import get_db
 from .routers.recommendations import router as RecommendationsEndpoints
 from app.models import User
 
