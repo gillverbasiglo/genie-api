@@ -5,7 +5,7 @@ import asyncio
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from ..database import get_db
+from ..init_db import get_db
 from ..models.user import User
 from ..models.device_token import DeviceToken
 from ..models.shares import Share
