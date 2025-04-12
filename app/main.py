@@ -27,6 +27,7 @@ from .routers.trip_advisor_endpoints import router as TripAdvisorEndpoints
 from .routers.invitation_endpoints import router as InvitationsEndpoints
 from .routers.invite_code_endpoints import router as InviteCodeEndpoints
 from .routers.apple_site_association_endpoint import router as AppleSiteAssociationEndpoint
+from .routers.recommendations import router as RecommendationsEndpoints
 from app.models import User
 
 logger = logging.getLogger(__name__)
@@ -40,7 +41,7 @@ app.include_router(GooglePlacesEndpoints)
 app.include_router(InvitationsEndpoints)
 app.include_router(InviteCodeEndpoints)
 app.include_router(AppleSiteAssociationEndpoint)
-
+app.include_router(RecommendationsEndpoints)
 # Global clients
 groq_client = OpenAI(
     base_url="https://api.groq.com/openai/v1",
