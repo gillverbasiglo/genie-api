@@ -7,6 +7,7 @@ class ShareBase(BaseModel):
     content_id: str
     content_type: str
     message: Optional[str] = None
+    title: Optional[str] = None
 
 class ShareCreate(ShareBase):
     to_user_id: str
