@@ -84,4 +84,3 @@ class SecretsManager:
         """Get API key for a specific service"""
         secret_id = f'{service_name}-api-key'
         return self.get_secret(secret_id)
-    
