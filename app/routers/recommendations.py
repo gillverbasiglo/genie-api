@@ -57,28 +57,18 @@ openai_client = AsyncOpenAI(
 )
 
 # Define the system prompt
-SYSTEM_PROMPT = """
-You are a helpful travel assistant specialized in generating personalized travel recommendations. Your responses must always be structured in valid JSON. Each recommendation should be clearly categorized into one of the following categories:
+SYSTEM_PROMPT = """You are a travel assistant specialized in generating EXACT place recommendations. Your recommendations must be specific places, not general areas or types of places. Each recommendation must be returned through the generate_recommendation function with:
 
-- restaurants
-- coffee shops
-- landmarks
-- events
-- unique local experiences
+- category: Must be one of the allowed categories
+- prompt: A concise, inviting description of the specific place
+- searchQuery: MUST BE an exact place name (e.g., "Starbucks Downtown Frederick", not "coffee shops in Frederick")
+- usedArchetypes and usedKeywords: Only those relevant to this specific place
+- recommendedImage: Choose based on the place type:
+  * restaurant1 or restaurant2: For specific restaurants or dining venues
+  * relax1 or relax2: For specific relaxation spots, spas, or scenic locations
+  * adventurer1 or adventurer2: For specific activity venues or landmarks
 
-For each recommendation, include:
-- prompt (concise, personalized description)
-- searchQuery (exact place name optimized for PlacesAPI, no quotes)
-- category (exactly one of the provided categories)
-- usedArchetypes (list of relevant archetypes)
-- usedKeywords (list of relevant keywords)
-- recommendedImage (select the most appropriate image name from these options:
-          * restaurant1 or restaurant2: For food, dining, or restaurant recommendations
-          * relax1 or relax2: For relaxation places, spas, hotels, quiet spots, or scenic views
-          * adventurer1 or adventurer2: For outdoor activities, adventure sports, or exploration sites)
-
-
-Return **only** JSON with no additional text or markdown.
+IMPORTANT: The searchQuery MUST be an exact place name that exists and can be found on Google Places API.
 """
 
 recommendation_categories = [
@@ -109,7 +99,7 @@ FUNCTION_SCHEMA = {
 }
 
 @router.post("/generate", response_model=List[Recommendation])
-@cache(expire=timedelta(hours=24), key_builder=lambda r: f"{r.location}:{r.archetypes}:{r.keywords}")
+# @cache(expire=timedelta(hours=24), key_builder=lambda r: f"{r.location}:{r.archetypes}:{r.keywords}")
 async def generate_recommendations(
     request: RecommendationRequest,
     db: Session = Depends(get_db)
@@ -117,40 +107,77 @@ async def generate_recommendations(
     try:
         client = groq_client if request.provider == "groq" else openai_client
         
-        recommendations = await generate_batch_recommendations(
-            client=client,
-            location=request.location,
-            keywords=request.keywords,
-            archetypes=request.archetypes,
-            model=request.model
-        )
+        # Generate recommendations for each category
+        recommendation_tasks = [
+            generate_batch_recommendations(
+                client=client,
+                location=request.location,
+                keywords=request.keywords,
+                archetypes=request.archetypes,
+                category=category,
+                model=request.model
+            )
+            for category in recommendation_categories
+        ]
         
-        return [Recommendation(id=str(uuid.uuid4()), **rec) for rec in recommendations]
+        if recommendation_tasks:
+            recommendations = await asyncio.gather(*recommendation_tasks, return_exceptions=True)
+            # Process results and filter out any errors
+            processed_recommendations = []
+            for i, result in enumerate(recommendations):
+                if isinstance(result, Exception):
+                    logger.error(f"Error generating recommendations for category {recommendation_categories[i]}: {result}")
+                else:
+                    processed_recommendations.append(result[0])
+            
+            print(processed_recommendations)
+            return [Recommendation(id=str(uuid.uuid4()), **rec) for rec in processed_recommendations]
             
     except Exception as e:
         logger.error(f"Error generating recommendations: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
+# @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
 async def generate_batch_recommendations(
     client: AsyncOpenAI,
     location: str,
     keywords: str,
     archetypes: str,
+    category: str = "coffee shop",
     model: str = "gpt-3.5-turbo"
 ) -> List[dict]:
-    """Generate recommendations for all categories in a single API call"""
+    """Generate recommendations for 1 category in a single API call"""
+    
+    user_prompt = f"""
+    Generate exactly 1 {category} recommendation for a SPECIFIC PLACE (not a general area) that matches these criteria:
+
+    Location: {location}
+    Interests: {keywords}
+    Archetypes: {archetypes}
+
+    REQUIREMENTS:
+    1. The searchQuery MUST be an exact place name (e.g., "Starbucks Reserve Frederick", not "coffee shops near Frederick")
+    2. The place must actually exist and be findable on Google Maps
+    3. The place must be relevant to the user's interests and archetypes
+    4. The recommendation must be for a specific venue, not a type of place
+
+    Example format for searchQuery:
+    ✓ "Cafe Nola Frederick" (specific place)
+    ✗ "cafes in Frederick" (too general)
+    ✓ "Baker Park Frederick" (specific place)
+    ✗ "parks near Frederick" (too general)
+    """
     
     response = await client.chat.completions.create(
         model=model,
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": f"Generate recommendations for {location} based on interests: {keywords} and archetypes: {archetypes}"}
+            {"role": "user", "content": user_prompt}
         ],
         functions=[FUNCTION_SCHEMA],
         function_call={"name": "generate_recommendation"},
-        temperature=0.7,
-        n=len(recommendation_categories)
+        temperature=0.6,  # Slightly lower temperature for more focused results
+        n=1
     )
     
     return [
