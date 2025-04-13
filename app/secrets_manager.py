@@ -84,28 +84,4 @@ class SecretsManager:
         """Get API key for a specific service"""
         secret_id = f'{service_name}-api-key'
         return self.get_secret(secret_id)
-        
-    def get_apns_credentials(self) -> Dict[str, str]:
-        """
-        Get APNs credentials from Secrets Manager.
-        """
-        try:
-            # Get the APNs credentials secret
-            secret_id = os.environ.get('APNS_SECRETS_NAME', 'apns-credentials')
-            credentials = self.get_json_secret(secret_id)
-            
-            # Create a temporary file for the auth key
-            with tempfile.NamedTemporaryFile(mode='w', delete=False) as temp_file:
-                temp_file.write(credentials['auth_key'])
-                auth_key_path = temp_file.name
-            
-            return {
-                'auth_key_path': auth_key_path,
-                'key_id': credentials['key_id'],
-                'team_id': credentials['team_id'],
-                'bundle_id': credentials['bundle_id']
-            }
-            
-        except Exception as e:
-            logger.error(f"Failed to get APNs credentials: {e}")
-            raise
+    
