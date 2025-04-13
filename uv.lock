@@ -535,7 +535,6 @@ dependencies = [
     { name = "gunicorn" },
     { name = "openai" },
     { name = "psycopg2" },
-    { name = "pyapns2" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "python-jose" },
@@ -565,7 +564,6 @@ requires-dist = [
     { name = "gunicorn", specifier = ">=23.0.0" },
     { name = "openai", specifier = ">=1.65.4" },
     { name = "psycopg2", specifier = ">=2.9.10" },
-    { name = "pyapns2", specifier = ">=2.0.0" },
     { name = "pydantic", specifier = ">=2.10.6" },
     { name = "pydantic-settings", specifier = ">=2.8.1" },
     { name = "python-jose", specifier = ">=3.4.0" },
@@ -1408,12 +1406,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/5f/29/bc9639b9c50abd93a8274fd2deffbf70b2a65aa9e7881e63ea6bc4319e84/psycopg2-2.9.10-cp39-cp39-win32.whl", hash = "sha256:9d5b3b94b79a844a986d029eee38998232451119ad653aea42bb9220a8c5066b", size = 1025259 },
     { url = "https://files.pythonhosted.org/packages/2c/f8/0be7d99d24656b689d83ac167240c3527efb0b161d814fb1dd58329ddf75/psycopg2-2.9.10-cp39-cp39-win_amd64.whl", hash = "sha256:88138c8dedcbfa96408023ea2b0c369eda40fe5d75002c0964c78f46f11fa442", size = 1163878 },
 ]
-
-[[package]]
-name = "pyapns2"
-version = "2.0.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/ad/7f/aab5002a7c749d3dc222c96d34a9f9e83ebb4471d5bc374f11cd5a85ae1a/pyapns2-2.0.0.tar.gz", hash = "sha256:73c5f37e65a4e9da3190a653ad1edbda24d06535d836e2f179a7fba74851b49b", size = 10873 }
 
 [[package]]
 name = "pyasn1"

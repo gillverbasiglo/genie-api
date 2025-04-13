@@ -5,7 +5,7 @@ from sqlalchemy import select
 from datetime import datetime
 
 from ..init_db import get_db
-from ..models.device_token import DeviceToken
+from app.models import DeviceToken
 from ..schemas.device_token import DeviceTokenCreate, DeviceTokenResponse
 from ..common import get_current_user
 

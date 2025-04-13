@@ -7,10 +7,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import select
 
 from ..init_db import get_db
-from ..models.user import User
-from ..models.device_token import DeviceToken
-from ..models.shares import Share
-from ..models.notifications import Notification
+from app.models import User, Share, Notification, DeviceToken
 from ..schemas.shares import ShareResponse, ShareCreate
 from ..common import get_current_user
 from ..common import manager as WebSocketConnectManager
