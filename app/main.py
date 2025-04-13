@@ -18,8 +18,9 @@ from .routers.invitation_endpoints import router as InvitationsEndpoints
 from .routers.invite_code_endpoints import router as InviteCodeEndpoints
 from .routers.sharing_endpoints import router as SharingEndpoints
 from .routers.apple_site_association_endpoint import router as AppleSiteAssociationEndpoint
-from .init_db import get_db
 from .routers.recommendations import router as RecommendationsEndpoints
+from .routers.device_token_endpoints import router as DeviceTokenEndpoints
+from .init_db import get_db
 from app.models import User
 
 logger = logging.getLogger(__name__)
@@ -35,6 +36,8 @@ app.include_router(InviteCodeEndpoints)
 app.include_router(AppleSiteAssociationEndpoint)
 app.include_router(SharingEndpoints)
 app.include_router(RecommendationsEndpoints)
+app.include_router(DeviceTokenEndpoints)
+
 # Global clients
 groq_client = OpenAI(
     base_url="https://api.groq.com/openai/v1",
