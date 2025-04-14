@@ -4,7 +4,7 @@ from cachetools import TTLCache
 from exa_py import Exa
 from fastapi import Depends, HTTPException, status, Response
 from firebase_admin import auth
-from openai import OpenAI, OpenAIError
+from openai import AsyncOpenAI, OpenAIError
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import select
@@ -42,12 +42,12 @@ app.include_router(DeviceTokenEndpoints)
 app.include_router(SearchEndpoints)
 
 # Global clients
-groq_client = OpenAI(
+groq_client = AsyncOpenAI(
     base_url="https://api.groq.com/openai/v1",
     api_key=settings.groq_api_key.get_secret_value()
 )
 
-openai_client = OpenAI(
+openai_client = AsyncOpenAI(
     api_key=settings.openai_api_key.get_secret_value()
 )
 
