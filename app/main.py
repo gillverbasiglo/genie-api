@@ -1,15 +1,8 @@
-import firebase_admin
-import google.auth
-import json
 import logging
-import requests
-import os
 
-from cachetools import cached, TTLCache
-from datetime import datetime
+from cachetools import TTLCache
 from exa_py import Exa
 from fastapi import Depends, HTTPException, status
-from jose import jwt
 from openai import OpenAI, OpenAIError
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -18,16 +11,16 @@ from tavily import TavilyClient
 from typing import Optional, List, Literal
 
 from .common import app, get_current_user
-from .init_db import get_db
 from .config import settings
-from .database import engine, Base, SessionLocal
 from .routers.google_places_endpoints import router as GooglePlacesEndpoints
-from .identity_credentials import WorkloadIdentityCredentials
 from .routers.trip_advisor_endpoints import router as TripAdvisorEndpoints
 from .routers.invitation_endpoints import router as InvitationsEndpoints
 from .routers.invite_code_endpoints import router as InviteCodeEndpoints
+from .routers.sharing_endpoints import router as SharingEndpoints
 from .routers.apple_site_association_endpoint import router as AppleSiteAssociationEndpoint
 from .routers.recommendations import router as RecommendationsEndpoints
+from .routers.device_token_endpoints import router as DeviceTokenEndpoints
+from .init_db import get_db
 from app.models import User
 
 logger = logging.getLogger(__name__)
@@ -41,7 +34,10 @@ app.include_router(GooglePlacesEndpoints)
 app.include_router(InvitationsEndpoints)
 app.include_router(InviteCodeEndpoints)
 app.include_router(AppleSiteAssociationEndpoint)
+app.include_router(SharingEndpoints)
 app.include_router(RecommendationsEndpoints)
+app.include_router(DeviceTokenEndpoints)
+
 # Global clients
 groq_client = OpenAI(
     base_url="https://api.groq.com/openai/v1",

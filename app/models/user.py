@@ -18,4 +18,9 @@ class User(Base):
     # Relationships
     sent_invites = relationship("Invitation", back_populates="inviter", foreign_keys="Invitation.inviter_id")
     received_invite = relationship("Invitation", back_populates="invitee", foreign_keys="Invitation.invitee_id") 
+    # For notifications and shares
+    device_tokens = relationship("DeviceToken", back_populates="user")
+    sent_shares = relationship("Share", foreign_keys="Share.from_user_id", back_populates="from_user")
+    received_shares = relationship("Share", foreign_keys="Share.to_user_id", back_populates="to_user")
+    notifications = relationship("Notification", back_populates="user")
     
