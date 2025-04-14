@@ -101,7 +101,7 @@ async def process_text(
         if request.provider == "groq":
             client = groq_client
 
-            response = client.chat.completions.create(
+            response = await client.chat.completions.create(
                 model="llama-3.1-8b-instant",
                 messages=[
                     {"role": "user", "content": request.text}
@@ -110,8 +110,8 @@ async def process_text(
         elif request.provider == "openai":
             client = openai_client
 
-            response = client.chat.completions.create(
-                model="gpt-3.5-turbo",
+            response = await client.chat.completions.create(
+                model="gpt-4o-mini",
                 messages=[
                     {"role": "user", "content": request.text}
                 ]
