@@ -17,9 +17,11 @@ class Settings(BaseSettings):
     google_api_key: SecretStr
     tavily_api_key: SecretStr
     exa_api_key: SecretStr
+    aviation_stack_api_key: SecretStr
+    tmdb_api_key: SecretStr
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    @field_validator("db_username", "db_password", "groq_api_key", "openai_api_key", "trip_advisor_api_key", "google_api_key", "tavily_api_key", "exa_api_key", mode="before")
+    @field_validator("db_username", "db_password", "groq_api_key", "openai_api_key", "trip_advisor_api_key", "google_api_key", "tavily_api_key", "exa_api_key", "aviation_stack_api_key", "tmdb_api_key",   mode="before")
     @classmethod
     def load_secrets(cls, v, info):
         if info.data.get("environment") == "production":
@@ -37,6 +39,10 @@ class Settings(BaseSettings):
                     v = secrets.get_api_key("tavily")
                 elif info.field_name == "exa_api_key":
                     v = secrets.get_api_key("exa")
+                elif info.field_name == "aviation_stack_api_key":
+                    v = secrets.get_api_key("aviation-stack")
+                elif info.field_name == "tmdb_api_key":
+                    v = secrets.get_api_key("tmdb")
                 elif info.field_name == "db_username":
                     v = secrets.get_db_credentials()['username']
                 elif info.field_name == "db_password":
