@@ -2,7 +2,8 @@ import logging
 
 from cachetools import TTLCache
 from exa_py import Exa
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Response
+from firebase_admin import auth
 from openai import OpenAI, OpenAIError
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -20,6 +21,7 @@ from .routers.sharing_endpoints import router as SharingEndpoints
 from .routers.apple_site_association_endpoint import router as AppleSiteAssociationEndpoint
 from .routers.recommendations import router as RecommendationsEndpoints
 from .routers.device_token_endpoints import router as DeviceTokenEndpoints
+from .routers.search import router as SearchEndpoints
 from .init_db import get_db
 from app.models import User
 
@@ -37,6 +39,7 @@ app.include_router(AppleSiteAssociationEndpoint)
 app.include_router(SharingEndpoints)
 app.include_router(RecommendationsEndpoints)
 app.include_router(DeviceTokenEndpoints)
+app.include_router(SearchEndpoints)
 
 # Global clients
 groq_client = OpenAI(
@@ -220,6 +223,7 @@ class UpdateArchetypesAndKeywordsRequest(BaseModel):
 
 @app.post("/update-archetypes-and-keywords", dependencies=[Depends(get_current_user)], response_model=None)
 async def update_archetypes_and_keywords(request: UpdateArchetypesAndKeywordsRequest, db: Session = Depends(get_db)):
+    current_user = await get_current_user()
     stmt = select(User).where(User.id == current_user["uid"])
     user = db.execute(stmt).scalar_one_or_none()
     if user is None:
