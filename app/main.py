@@ -221,9 +221,8 @@ class UpdateArchetypesAndKeywordsRequest(BaseModel):
     archetypes: List[str]
     keywords: List[str]
 
-@app.post("/update-archetypes-and-keywords", dependencies=[Depends(get_current_user)], response_model=None)
-async def update_archetypes_and_keywords(request: UpdateArchetypesAndKeywordsRequest, db: Session = Depends(get_db)):
-    current_user = await get_current_user()
+@app.post("/update-archetypes-and-keywords", response_model=None)
+async def update_archetypes_and_keywords(request: UpdateArchetypesAndKeywordsRequest, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
     stmt = select(User).where(User.id == current_user["uid"])
     user = db.execute(stmt).scalar_one_or_none()
     if user is None:
