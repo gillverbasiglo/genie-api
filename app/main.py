@@ -240,6 +240,6 @@ async def update_archetypes_and_keywords(request: UpdateArchetypesAndKeywordsReq
 
     return {
         "archetypes": user.archetypes,
-        "keywords": user.key
+        "keywords": user.keywords
     }
 
