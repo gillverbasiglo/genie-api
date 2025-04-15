@@ -294,6 +294,9 @@ async def get_friend_portal_recommendations(
     if not friend:
         raise HTTPException(status_code=404, detail="Friend not found")
     
+    if not user.archetypes or not friend.archetypes:
+        raise HTTPException(status_code=400, detail="User or friend archetypes not found")
+    
     try:
         common_archetypes = find_common_archetypes(user.archetypes, friend.archetypes)
         recommendations = await generate_friend_portal_recommendations(
