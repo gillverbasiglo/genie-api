@@ -283,8 +283,8 @@ async def get_friend_portal_recommendations(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    if current_user["uid"] != friend_id:
-        raise HTTPException(status_code=403, detail="You are not authorized to access this friend's portal")
+    if current_user["uid"] == friend_id:
+        raise HTTPException(status_code=403, detail="You cannot access your own portal through this endpoint")
     
     user = get_user_by_id(db, current_user["uid"])
     if not user:
