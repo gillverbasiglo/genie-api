@@ -81,7 +81,7 @@ async def get_current_user_info(
         "keywords": user.keywords
     }
 
-@app.post("/process-text", dependencies=[Depends(get_current_user)])
+@app.post("/process-text")
 async def process_text(
     request: TextRequest
 ) -> dict[str, str]:
@@ -169,7 +169,7 @@ class WebSearchRequest(BaseModel):
     include_domains: Optional[List[str]] = ['youtube.com']
     type: Optional[str] = 'neural'
 
-@app.post("/web-search", dependencies=[Depends(get_current_user)], response_model=None)
+@app.post("/web-search", response_model=None)
 async def web_search(request: WebSearchRequest):
     """
     Perform a web search using the specified provider.
