@@ -235,18 +235,18 @@ async def generate_friend_portal_recommendations(
     - IMPORTANT: Include "image" field with the most representative archetype or keyword for this recommendation (just the term itself, like "adventurer" or "hiking")
 
     Format your response in JSON with the following structure:
-    {
+    {{
       "recommendations": [
-        {
+        {{
           "title": "Name of Recommendation",
           "description": "Detailed description of the recommendation including personalized explanation",
           "practical_tips": "Practical information like location, hours, etc.",
           "keywords": ["keyword1", "keyword2", "keyword3"],
           "archetypes": ["archetype1", "archetype2", "archetype3"],
           "image": "most_relevant_term"
-        }
+        }}
       ]
-    }
+    }}
 
     Make sure the recommendations are diverse (not all restaurants or all museums).
     Recommendations should be authentic to {location}'s culture and geography.
@@ -269,14 +269,15 @@ async def generate_friend_portal_recommendations(
         max_tokens=1500
     )
     
-    return response.choices[0].message.content
+    return json.loads(response.choices[0].message.content)
 
 class FriendPortalRecommendationRequest(BaseModel):
     location: str
-    model: str = "gpt-4o-mini"
+    model: str = "Llama3-8b-8192"
+    provider: str = "groq"
     max_recommendations: int = 3
 
-@router.post("/friends/{friend_id}/portal", response_model=List[Recommendation])
+@router.post("/friends/{friend_id}/portal", response_model=None)
 async def get_friend_portal_recommendations(
     friend_id: str,
     request: FriendPortalRecommendationRequest,
@@ -300,14 +301,15 @@ async def get_friend_portal_recommendations(
     try:
         common_archetypes = find_common_archetypes(user.archetypes, friend.archetypes)
         recommendations = await generate_friend_portal_recommendations(
-            client=openai_client,
+            client=groq_client if request.provider == "groq" else openai_client,
             location=request.location,
-            archetypes=common_archetypes,
+            archetypes=", ".join(common_archetypes),
             user_name=user.display_name,
-            friend_name=friend.display_name
+            friend_name=friend.display_name,
+            model=request.model
         )
 
-        return {"result": recommendations}
+        return recommendations
     except Exception as e:
         logger.error(f"Error finding common archetypes: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
