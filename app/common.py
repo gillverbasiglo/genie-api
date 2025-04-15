@@ -60,7 +60,6 @@ manager = ConnectionManager()
 
 # Dependency to get current user from token
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    token = credentials.credentials
 
     if settings.environment != "production":
         logger.info("Development mode - skipping token verification")
@@ -70,6 +69,7 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
             "name": "Development User"
         }
 
+    token = credentials.credentials
     # In production, verify the token
     logger.info(f"Verifying token: {token[:10]}...{token[-10:]} (truncated for security)")
     try:
