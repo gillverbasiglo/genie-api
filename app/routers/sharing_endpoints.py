@@ -1,6 +1,9 @@
 import logging
 import json
 import asyncio
+import httpx
+from typing import List
+from pydantic import BaseModel
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -11,12 +14,152 @@ from app.models import User, Share, Notification, DeviceToken
 from ..schemas.shares import ShareResponse, ShareCreate
 from ..common import get_current_user
 from ..common import manager as WebSocketConnectManager
+from ..config import settings
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/share", tags=["share"])
+
+class TestNotificationPayload(BaseModel):
+    device_token: str
+    title: str
+    message: str
+    badge: int = 1
+
+async def send_single_notification(client: httpx.AsyncClient, device_token: str, notification: Notification) -> bool:
+    """
+    Send a single push notification to a device
+    
+    Args:
+        client: httpx AsyncClient instance
+        device_token: Device token to send notification to
+        notification: Notification object containing the notification details
+        
+    Returns:
+        bool: True if notification was sent successfully, False otherwise
+    """
+    try:
+        
+        # Prepare notification payload
+        payload = {
+            "device_token": device_token,
+            "title": notification.title,
+            "message": notification.message,
+            "badge": 1
+        }
+        
+        # Send notification
+        response = await client.post(
+            settings.push_notification_url.get_secret_value(),
+            json=payload
+        )
+        
+        if response.status_code == 200:
+            logger.info(f"Successfully sent notification to device {device_token[:10]}...")
+            return True
+        else:
+            logger.error(f"Failed to send notification to device {device_token[:10]}... Status: {response.status_code}")
+            return False
+            
+    except Exception as e:
+        logger.error(f"Error sending notification to device {device_token[:10]}...: {str(e)}")
+        return False
+
+@router.post("/test-notification")
+async def test_single_notification(
+    payload: TestNotificationPayload,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Test endpoint to send a single push notification with custom payload
+    
+    Args:
+        payload: TestNotificationPayload containing device token and notification details
+        current_user: Current authenticated user
+        
+    Returns:
+        dict: Response containing success status and message
+    """
+    try:
+        # Create a notification object from the payload
+        notification = Notification(
+            user_id=current_user["uid"],
+            type="test",
+            title=payload.title,
+            message=payload.message,
+            data=json.dumps({}),
+            is_read=False
+        )
+        
+        # Send the notification
+        async with httpx.AsyncClient() as client:
+            success = await send_single_notification(client, payload.device_token, notification)
+            
+            if success:
+                return {
+                    "status": "success",
+                    "message": f"Notification sent successfully to device {payload.device_token[:10]}..."
+                }
+            else:
+                return {
+                    "status": "error",
+                    "message": f"Failed to send notification to device {payload.device_token[:10]}..."
+                }
+                
+    except Exception as e:
+        logger.error(f"Error in test notification: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to send test notification: {str(e)}"
+        )
+
+async def send_push_notifications(device_tokens: List[DeviceToken], notification: Notification):
+    """
+    Send push notifications to multiple devices via HTTP endpoint
+    
+    Args:
+        device_tokens: List of DeviceToken objects
+        notification: Notification object containing the notification details
+    """
+    if not device_tokens:
+        logger.warning("No device tokens found for notification")
+        return
+        
+    # Extract device tokens
+    tokens = [token.token for token in device_tokens]
+    logger.info(f"Found {len(tokens)} active device tokens for notification")
+    
+    # Create a semaphore to limit concurrent requests
+    semaphore = asyncio.Semaphore(10)  # Limit to 10 concurrent requests
+    
+    async def send_with_semaphore(client: httpx.AsyncClient, token: str) -> bool:
+        async with semaphore:
+            return await send_single_notification(client, token, notification)
+    
+    # Send notifications concurrently
+    try:
+        async with httpx.AsyncClient() as client:
+            # Create tasks for all notifications
+            tasks = [send_with_semaphore(client, token) for token in tokens]
+            
+            # Wait for all notifications to complete
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            # Count successful notifications
+            successful = sum(1 for result in results if result is True)
+            failed = len(results) - successful
+            
+            logger.info(f"Notification delivery summary - Total: {len(tokens)}, Successful: {successful}, Failed: {failed}")
+            
+            # Log failed tokens
+            failed_tokens = [token for token, success in zip(tokens, results) if not success]
+            if failed_tokens:
+                logger.warning(f"Failed to deliver notifications to tokens: {failed_tokens}")
+                
+    except Exception as e:
+        logger.error(f"Error in push notification batch: {str(e)}")
 
 @router.post("/recommendation", response_model=ShareResponse)
 async def share_content(
@@ -80,6 +223,7 @@ async def share_content(
     
     # Send real-time update via WebSocket if the user is online
     asyncio.create_task(WebSocketConnectManager.send_notification(share_data.to_user_id, notification_data))
+    
     # Get active device tokens for the user
     stmt = select(DeviceToken).where(
         DeviceToken.is_active == True,
@@ -87,8 +231,9 @@ async def share_content(
         DeviceToken.platform == "ios"
     )
     device_tokens = db.execute(stmt).scalars().all()
-    # Send push notifications (Will be implemented later)
-    # asyncio.create_task(send_push_notifications(device_tokens, notification))
+    
+    # Send push notifications
+    asyncio.create_task(send_push_notifications(device_tokens, notification))
     
     return share
 
