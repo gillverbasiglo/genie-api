@@ -1,7 +1,7 @@
 import logging
 import json
 import asyncio
-import httpx
+import requests
 from typing import List
 from pydantic import BaseModel
 
@@ -28,7 +28,7 @@ class TestNotificationPayload(BaseModel):
     message: str
     badge: int = 1
 
-async def send_single_notification(client: httpx.AsyncClient, device_token: str, notification: Notification) -> bool:
+async def send_single_notification(device_token: str, notification: Notification) -> bool:
     """
     Send a single push notification to a device
     
@@ -41,19 +41,15 @@ async def send_single_notification(client: httpx.AsyncClient, device_token: str,
         bool: True if notification was sent successfully, False otherwise
     """
     try:
-        
-        # Prepare notification payload
-        payload = {
-            "device_token": device_token,
-            "title": notification.title,
-            "message": notification.message,
-            "badge": 1
-        }
-        
         # Send notification
-        response = await client.post(
+        response = requests.post(
             settings.push_notification_url.get_secret_value(),
-            json=payload
+            json.dumps({
+                "deviceToken": device_token,
+                "message": notification.message,
+                "title": notification.title,
+                "badge": 1
+            })
         )
         
         if response.status_code == 200:
@@ -66,54 +62,6 @@ async def send_single_notification(client: httpx.AsyncClient, device_token: str,
     except Exception as e:
         logger.error(f"Error sending notification to device {device_token[:10]}...: {str(e)}")
         return False
-
-@router.post("/test-notification")
-async def test_single_notification(
-    payload: TestNotificationPayload,
-    current_user: dict = Depends(get_current_user)
-):
-    """
-    Test endpoint to send a single push notification with custom payload
-    
-    Args:
-        payload: TestNotificationPayload containing device token and notification details
-        current_user: Current authenticated user
-        
-    Returns:
-        dict: Response containing success status and message
-    """
-    try:
-        # Create a notification object from the payload
-        notification = Notification(
-            user_id=current_user["uid"],
-            type="test",
-            title=payload.title,
-            message=payload.message,
-            data=json.dumps({}),
-            is_read=False
-        )
-        
-        # Send the notification
-        async with httpx.AsyncClient() as client:
-            success = await send_single_notification(client, payload.device_token, notification)
-            
-            if success:
-                return {
-                    "status": "success",
-                    "message": f"Notification sent successfully to device {payload.device_token[:10]}..."
-                }
-            else:
-                return {
-                    "status": "error",
-                    "message": f"Failed to send notification to device {payload.device_token[:10]}..."
-                }
-                
-    except Exception as e:
-        logger.error(f"Error in test notification: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to send test notification: {str(e)}"
-        )
 
 async def send_push_notifications(device_tokens: List[DeviceToken], notification: Notification):
     """
@@ -134,29 +82,28 @@ async def send_push_notifications(device_tokens: List[DeviceToken], notification
     # Create a semaphore to limit concurrent requests
     semaphore = asyncio.Semaphore(10)  # Limit to 10 concurrent requests
     
-    async def send_with_semaphore(client: httpx.AsyncClient, token: str) -> bool:
+    async def send_with_semaphore(token: str) -> bool:
         async with semaphore:
-            return await send_single_notification(client, token, notification)
+            return await send_single_notification(token, notification)
     
     # Send notifications concurrently
     try:
-        async with httpx.AsyncClient() as client:
-            # Create tasks for all notifications
-            tasks = [send_with_semaphore(client, token) for token in tokens]
-            
-            # Wait for all notifications to complete
-            results = await asyncio.gather(*tasks, return_exceptions=True)
-            
-            # Count successful notifications
-            successful = sum(1 for result in results if result is True)
-            failed = len(results) - successful
-            
-            logger.info(f"Notification delivery summary - Total: {len(tokens)}, Successful: {successful}, Failed: {failed}")
-            
-            # Log failed tokens
-            failed_tokens = [token for token, success in zip(tokens, results) if not success]
-            if failed_tokens:
-                logger.warning(f"Failed to deliver notifications to tokens: {failed_tokens}")
+        # Create tasks for all notifications
+        tasks = [send_with_semaphore(token) for token in tokens]
+        
+        # Wait for all notifications to complete
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        # Count successful notifications
+        successful = sum(1 for result in results if result is True)
+        failed = len(results) - successful
+        
+        logger.info(f"Notification delivery summary - Total: {len(tokens)}, Successful: {successful}, Failed: {failed}")
+        
+        # Log failed tokens
+        failed_tokens = [token for token, success in zip(tokens, results) if not success]
+        if failed_tokens:
+            logger.warning(f"Failed to deliver notifications to tokens: {failed_tokens}")
                 
     except Exception as e:
         logger.error(f"Error in push notification batch: {str(e)}")
