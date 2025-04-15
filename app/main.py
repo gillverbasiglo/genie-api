@@ -234,8 +234,12 @@ async def update_archetypes_and_keywords(request: UpdateArchetypesAndKeywordsReq
 
     user.archetypes = request.archetypes
     user.keywords = request.keywords
+
     db.commit()
     db.refresh(user)
 
-    return Response(status_code=204)
+    return {
+        "archetypes": user.archetypes,
+        "keywords": user.key
+    }
 
