@@ -303,8 +303,8 @@ async def get_friend_portal_recommendations(
             client=openai_client,
             location=request.location,
             archetypes=common_archetypes,
-            user_name=user.name,
-            friend_name=friend.name
+            user_name=user.display_name,
+            friend_name=friend.display_name
         )
 
         return {"result": recommendations}
