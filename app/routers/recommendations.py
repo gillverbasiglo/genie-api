@@ -18,6 +18,7 @@ from app.common import get_current_user
 from app.config import settings
 from app.init_db import get_db
 from app.models import User
+from app.services import get_user_by_id, find_common_archetypes
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -55,6 +56,23 @@ groq_client = AsyncOpenAI(
 openai_client = AsyncOpenAI(
     api_key=settings.openai_api_key.get_secret_value()
 )
+
+keywords = [
+    "cooking", "baking", "wine tasting", "beer brewing", "mixology", "dancing",
+    "stamp collecting", "vintage items", "skiing", "hiking", "cycling",
+    "rock climbing", "kayaking", "yoga", "running", "swimming", "weightlifting",
+    "playing tennis", "golf", "martial arts", "skateboarding", "surfing",
+    "climbing", "boxing", "sailing", "bungee jumping", "adventure sports",
+    "attractions and travel", "urban", "spa", "museums", "outdoors", "beach",
+    "roadside", "wildlife", "camping", "playground", "national parks",
+    "historical sites", "cultural landmarks", "scenic routes", "safari parks",
+    "zoos", "resorts", "buildings", "romantic date", "date night", "nightlife",
+    "board games", "karaoke", "picnic", "barbecue", "movies",
+    "electronic music", "games", "art", "tech", "concerts",
+    "opera", "music festivals", "theater", "exhibitions", "robotics",
+    "education", "workshops", "designer", "architecture", "photography",
+    "spa", "meditation", "yoga retreats"
+]
 
 # Define the system prompt
 SYSTEM_PROMPT = """You are a travel assistant specialized in generating EXACT place recommendations. Your recommendations must be specific places, not general areas or types of places. Each recommendation must be returned through the generate_recommendation function with:
@@ -185,3 +203,108 @@ async def generate_batch_recommendations(
         for choice in response.choices
         if choice.message.function_call
     ]
+
+async def generate_friend_portal_recommendations(
+    client: AsyncOpenAI,
+    location: str,
+    archetypes: str,
+    user_name: str,
+    friend_name: str,
+    model: str = "gpt-4o-mini",
+    max_recommendations: int = 3
+) -> List[dict]:
+    """Generate recommendations for a friend's portal"""
+
+    # Build the prompt
+    llm_prompt = f"""
+    You are a travel and experience advisor for two friends named {user_name} and {friend_name} who share similar interests and are visiting {location}.
+
+    Their common travel archetypes are: {archetypes}
+
+    Based on these shared interests and their current location, provide {max_recommendations} specific recommendations that would appeal to both of them. Each recommendation should:
+    1. Be a specific restaurant, attraction, or activity in {location}
+    2. Explain why it matches their shared interests/archetypes
+    3. Include practical details (location area, best time to visit, what makes it special)
+
+    For each recommendation, ALSO include:
+    - A clear title for the recommendation
+    - Start with "For {user_name} and his friend {friend_name}..."
+    - Include a personalized explanation of why this particular recommendation suits both {user_name} and {friend_name} based on their shared archetypes
+    - Identify TOP 3 KEYWORDS from this list that match this recommendation: {", ".join(keywords[:20])}
+    - Identify TOP 3 ARCHETYPES from this list that match this recommendation: {archetypes}
+    - IMPORTANT: Include "image" field with the most representative archetype or keyword for this recommendation (just the term itself, like "adventurer" or "hiking")
+
+    Format your response in JSON with the following structure:
+    {
+      "recommendations": [
+        {
+          "title": "Name of Recommendation",
+          "description": "Detailed description of the recommendation including personalized explanation",
+          "practical_tips": "Practical information like location, hours, etc.",
+          "keywords": ["keyword1", "keyword2", "keyword3"],
+          "archetypes": ["archetype1", "archetype2", "archetype3"],
+          "image": "most_relevant_term"
+        }
+      ]
+    }
+
+    Make sure the recommendations are diverse (not all restaurants or all museums).
+    Recommendations should be authentic to {location}'s culture and geography.
+    Return ONLY the JSON with no other text. Be extremely careful with JSON syntax - all quotes, commas, and brackets must be correctly placed.
+    """
+
+    response = await client.chat.completions.create(
+        model=model,
+        messages=[
+            {
+                "role": "system",
+                "content": "You are a helpful travel assistant specialized in tailoring recommendations based on travel archetypes and interests. Always respond with valid, properly formatted JSON. Be extremely careful with JSON syntax."
+            },
+            {
+                "role": "user", 
+                "content": llm_prompt
+            }
+        ],
+        temperature=0.6,
+        max_tokens=1500
+    )
+    
+    return response.choices[0].message.content
+
+class FriendPortalRecommendationRequest(BaseModel):
+    location: str
+    model: str = "gpt-4o-mini"
+    max_recommendations: int = 3
+
+@router.post("/friends/{friend_id}/portal", response_model=List[Recommendation])
+async def get_friend_portal_recommendations(
+    friend_id: str,
+    request: FriendPortalRecommendationRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if current_user.id != friend_id:
+        raise HTTPException(status_code=403, detail="You are not authorized to access this friend's portal")
+    
+    user = get_user_by_id(db, current_user["uid"])
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    friend = get_user_by_id(db, friend_id)
+    if not friend:
+        raise HTTPException(status_code=404, detail="Friend not found")
+    
+    try:
+        common_archetypes = find_common_archetypes(user.archetypes, friend.archetypes)
+        recommendations = await generate_friend_portal_recommendations(
+            client=openai_client,
+            location=request.location,
+            archetypes=common_archetypes,
+            user_name=user.name,
+            friend_name=friend.name
+        )
+
+        return {"result": recommendations}
+    except Exception as e:
+        logger.error(f"Error finding common archetypes: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
