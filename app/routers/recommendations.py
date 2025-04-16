@@ -2,6 +2,8 @@ import asyncio
 import json
 import logging
 import uuid
+import random
+
 from datetime import timedelta
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException
@@ -34,6 +36,8 @@ class RecommendationRequest(BaseModel):
     model: str = "llama-3.1-8b-instant"
     archetypes: str
     keywords: str
+    max_recommendations: int = 5
+    user_prompt: Optional[str] = None
 
 class Recommendation(BaseModel):
     """
@@ -121,39 +125,64 @@ async def generate_recommendations(
 ):
     try:
         client = groq_client if request.provider == "groq" else openai_client
-        
-        # Generate recommendations for each category
-        recommendation_tasks = [
-            generate_batch_recommendations(
+
+        if request.user_prompt:
+            recommendations = await generate_recommendations_for_user_request(
                 client=client,
                 location=request.location,
-                keywords=request.keywords,
                 archetypes=request.archetypes,
-                category=category,
+                keywords=request.keywords,
+                user_request=request.user_prompt,
+                max_recommendations=request.max_recommendations,
                 model=request.model
             )
-            for category in recommendation_categories
-        ]
-        
-        if recommendation_tasks:
-            recommendations = await asyncio.gather(*recommendation_tasks, return_exceptions=True)
-            # Process results and filter out any errors
-            processed_recommendations = []
-            for i, result in enumerate(recommendations):
-                if isinstance(result, Exception):
-                    logger.error(f"Error generating recommendations for category {recommendation_categories[i]}: {result}")
-                else:
-                    processed_recommendations.append(result[0])
-            
+
             # Load cover images
             cover_images = load_cover_images()
 
             # Iterate through recommendations and add cover images using the value on the recommendedImage field
-            for recommendation in processed_recommendations:
+            for recommendation in recommendations:
                 image_url = select_cover_image(cover_images, recommendation["recommendedImage"])
                 recommendation["recommendedImage"] = get_s3_image_url(image_url)
 
-            return [Recommendation(id=str(uuid.uuid4()), **rec) for rec in processed_recommendations]
+            return [Recommendation(id=str(uuid.uuid4()), **rec) for rec in recommendations]
+        else:
+            # Randomly shuffle the recommendation categories based on max_recommendations
+            recommendation_categories = random.sample(recommendation_categories, request.max_recommendations)
+            
+            # Generate recommendations for each category
+            recommendation_tasks = [
+                generate_batch_recommendations(
+                    client=client,
+                    location=request.location,
+                    keywords=request.keywords,
+                    archetypes=request.archetypes,
+                    category=category,
+                    model=request.model,
+                    user_prompt=request.user_prompt
+                )
+                for category in recommendation_categories
+            ]
+            
+            if recommendation_tasks:
+                recommendations = await asyncio.gather(*recommendation_tasks, return_exceptions=True)
+                # Process results and filter out any errors
+                processed_recommendations = []
+                for i, result in enumerate(recommendations):
+                    if isinstance(result, Exception):
+                        logger.error(f"Error generating recommendations for category {recommendation_categories[i]}: {result}")
+                    else:
+                        processed_recommendations.append(result[0])
+                
+                # Load cover images
+                cover_images = load_cover_images()
+
+                # Iterate through recommendations and add cover images using the value on the recommendedImage field
+                for recommendation in processed_recommendations:
+                    image_url = select_cover_image(cover_images, recommendation["recommendedImage"])
+                    recommendation["recommendedImage"] = get_s3_image_url(image_url)
+
+                return [Recommendation(id=str(uuid.uuid4()), **rec) for rec in processed_recommendations]
             
     except Exception as e:
         logger.error(f"Error generating recommendations: {str(e)}")
@@ -200,6 +229,50 @@ async def generate_batch_recommendations(
         function_call={"name": "generate_recommendation"},
         temperature=0.6,  # Slightly lower temperature for more focused results
         n=1
+    )
+    
+    return [
+        json.loads(choice.message.function_call.arguments)
+        for choice in response.choices
+        if choice.message.function_call
+    ]
+
+async def generate_recommendations_for_user_request(
+    client: AsyncOpenAI,
+    location: str,
+    archetypes: str,
+    keywords: str,
+    user_request: str,
+    max_recommendations: int = 3,
+    model: str = "gpt-4o-mini"
+) -> List[dict]:
+    """Generate recommendations for a user's request"""
+
+    # Build the prompt
+    llm_prompt = f"""
+    Generate exactly {max_recommendations} highly relevant and diverse places recommendations based on user's interests and archetypes that are around the user's current location.
+
+    - Location: {location}
+    - Interests: {keywords}
+    - Archetypes: {archetypes}
+    - User request: {user_request}
+
+    IMPORTANT:
+    - The recommendations MUST be unique and not repeat the same place
+    - The recommendations MUST be relevant to the user's interests and archetypes
+    - The recommendations MUST be specific places, not general areas or types of places
+    """
+
+    response = await client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": llm_prompt}
+        ],
+        functions=[FUNCTION_SCHEMA],
+        function_call={"name": "generate_recommendation"},
+        temperature=0.6,  # Slightly lower temperature for more focused results
+        n=max_recommendations
     )
     
     return [
