@@ -245,6 +245,7 @@ async def generate_friend_portal_recommendations(
           "title": "Name of Recommendation",
           "description": "Detailed description of the recommendation including personalized explanation",
           "practical_tips": "Practical information like location, hours, etc.",
+          "searchQuery": "MUST be an exact place name (e.g., "Starbucks Reserve Frederick", not "coffee shops near Frederick")",
           "keywords": ["keyword1", "keyword2", "keyword3"],
           "archetypes": ["archetype1", "archetype2", "archetype3"],
           "image": "most_relevant_term"
