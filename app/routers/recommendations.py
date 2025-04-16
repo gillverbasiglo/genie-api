@@ -293,44 +293,40 @@ async def generate_friend_portal_recommendations(
 
     # Build the prompt
     llm_prompt = f"""
-    You are a travel and experience advisor for two friends named {user_name} and {friend_name} who share similar interests and are visiting {location}.
+    All right, travel partner—let’s line up a handful of spots around {location} that will feel perfectly “us.”
+    I’ll serve up to **{max_recommendations}** ideas, each chosen with your shared archetypes ({archetypes}) in mind, so you and {friend_name} can settle in, swap stories, and enjoy the place itself rather than fuss over the planning.
 
-    {user_name} is the one looking at the recommendations.
-    {friend_name} is the one who will be receiving the recommendations.
+    For every suggestion I’ll make sure to:
+    1. Pick a single, exact place or activity in {location} (no vague “best cafés nearby” stuff).
+    2. Gently point out why it matches what the two of you typically gravitate toward—letting the place’s vibe and details do the convincing.
+    3. Add the practical bits you’ll actually need: neighborhood, ideal time to go, a tip on what makes it stand out, and why it’s an easy meet‑up spot.
 
-    Their common travel archetypes are: {archetypes}
+    **Extra details I’ll tuck into each entry**
+    - **Title** – short and clear.
+    - **Opening line** – a quick note on how the spot fits both of you (I’ll skip using your name, mention {friend_name} once, and stick to second‑person everywhere else).
+    - **Personalized note** – a friendly aside connecting the pick to your shared archetypes, without claiming to read your mind.
+    - **TOP 3 KEYWORDS** – chosen from: {", ".join(keywords[:20])}.
+    - **TOP 3 ARCHETYPES** – pulled from {archetypes}.
+    - **image** – just the single archetype or keyword that best sums up the recommendation.
 
-    Based on these shared interests and their current location, provide {max_recommendations} specific recommendations that would appeal to both of them. Each recommendation should:
-    1. Be a specific restaurant, attraction, or activity in {location}
-    2. Explain why it matches their shared interests/archetypes
-    3. Include practical details (location area, best time to visit, what makes it special)
+    I’ll return everything in **pure JSON**—nothing else—using this structure (watch those commas and quotes!):
 
-    For each recommendation, ALSO include:
-    - A clear title for the recommendation
-    - Start by indicating how the recommendation will be appealing for {user_name} and {friend_name} using appropriate pronouns. Don't use {user_name} name in the recommendation."
-    - Include a personalized explanation of why this particular recommendation suits both {user_name} and {friend_name} based on their shared archetypes
-    - Identify TOP 3 KEYWORDS from this list that match this recommendation: {", ".join(keywords[:20])}
-    - Identify TOP 3 ARCHETYPES from this list that match this recommendation: {archetypes}
-    - IMPORTANT: Include "image" field with the most representative archetype or keyword for this recommendation (just the term itself, like "adventurer" or "hiking")
-
-    Format your response in JSON with the following structure:
     {{
-      "recommendations": [
+    "recommendations": [
         {{
-          "title": "Name of Recommendation",
-          "description": "Detailed description of the recommendation including personalized explanation",
-          "practical_tips": "Practical information like location, hours, etc.",
-          "searchQuery": "MUST be an exact place name (e.g., "Starbucks Reserve Frederick", not "coffee shops near Frederick")",
-          "keywords": ["keyword1", "keyword2", "keyword3"],
-          "archetypes": ["archetype1", "archetype2", "archetype3"],
-          "image": "most_relevant_term"
+        "title": "Name of Recommendation",
+        "description": "Why this fits both of you, including subtle nods to shared interests and why it’s an inviting place to meet",
+        "practical_tips": "Neighborhood, hours, best time, standout feature, and why it’s an easy rendezvous spot",
+        "searchQuery": "Exact Place Name",
+        "keywords": ["keyword1", "keyword2", "keyword3"],
+        "archetypes": ["archetype1", "archetype2", "archetype3"],
+        "image": "most_relevant_term"
         }}
-      ]
+    ]
     }}
 
-    Make sure the recommendations are diverse (not all restaurants or all museums).
-    Recommendations should be authentic to {location}'s culture and geography.
-    Return ONLY the JSON with no other text. Be extremely careful with JSON syntax - all quotes, commas, and brackets must be correctly placed.
+    I’ll keep the list varied—no wall‑to‑wall restaurants or all museums—and true to {location}’s character.
+    And remember: **only the JSON comes back to you.**
     """
 
     response = await client.chat.completions.create(
