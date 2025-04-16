@@ -5,6 +5,7 @@ from .secrets_manager import SecretsManager
 
 class Settings(BaseSettings):
     aws_region: str = "us-east-1"
+    aws_bucket_name: str = "genie-cover-images"
     environment: str = "development"
     host: str
     db_username: str
