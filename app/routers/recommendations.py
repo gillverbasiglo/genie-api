@@ -148,7 +148,7 @@ async def generate_recommendations(
             return [Recommendation(id=str(uuid.uuid4()), **rec) for rec in recommendations]
         else:
             # Randomly shuffle the recommendation categories based on max_recommendations
-            recommendation_categories = random.sample(recommendation_categories, request.max_recommendations)
+            categories = random.sample(recommendation_categories, request.max_recommendations)
             
             # Generate recommendations for each category
             recommendation_tasks = [
@@ -158,10 +158,9 @@ async def generate_recommendations(
                     keywords=request.keywords,
                     archetypes=request.archetypes,
                     category=category,
-                    model=request.model,
-                    user_prompt=request.user_prompt
+                    model=request.model
                 )
-                for category in recommendation_categories
+                for category in categories
             ]
             
             if recommendation_tasks:
@@ -170,7 +169,7 @@ async def generate_recommendations(
                 processed_recommendations = []
                 for i, result in enumerate(recommendations):
                     if isinstance(result, Exception):
-                        logger.error(f"Error generating recommendations for category {recommendation_categories[i]}: {result}")
+                        logger.error(f"Error generating recommendations for category {categories[i]}: {result}")
                     else:
                         processed_recommendations.append(result[0])
                 
