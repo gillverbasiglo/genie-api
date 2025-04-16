@@ -295,6 +295,9 @@ async def generate_friend_portal_recommendations(
     llm_prompt = f"""
     You are a travel and experience advisor for two friends named {user_name} and {friend_name} who share similar interests and are visiting {location}.
 
+    {user_name} is the one looking at the recommendations.
+    {friend_name} is the one who will be receiving the recommendations.
+
     Their common travel archetypes are: {archetypes}
 
     Based on these shared interests and their current location, provide {max_recommendations} specific recommendations that would appeal to both of them. Each recommendation should:
@@ -304,7 +307,7 @@ async def generate_friend_portal_recommendations(
 
     For each recommendation, ALSO include:
     - A clear title for the recommendation
-    - Start with "For {user_name} and his friend {friend_name}..."
+    - Start by indicating how the recommendation will be appealing for {user_name} and {friend_name} using appropriate pronouns. Don't use {user_name} name in the recommendation."
     - Include a personalized explanation of why this particular recommendation suits both {user_name} and {friend_name} based on their shared archetypes
     - Identify TOP 3 KEYWORDS from this list that match this recommendation: {", ".join(keywords[:20])}
     - Identify TOP 3 ARCHETYPES from this list that match this recommendation: {archetypes}
