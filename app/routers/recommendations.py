@@ -18,7 +18,7 @@ from app.common import get_current_user
 from app.config import settings
 from app.init_db import get_db
 from app.models import User
-from app.services import get_user_by_id, find_common_archetypes
+from app.services import get_user_by_id, find_common_archetypes, load_cover_images, select_cover_image, get_s3_image_url
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -308,6 +308,15 @@ async def get_friend_portal_recommendations(
             friend_name=friend.display_name,
             model=request.model
         )
+
+        # Load cover images
+        cover_images = load_cover_images()
+
+        # Iterate through recommendations and add cover images using the value on the image field
+        for recommendation in recommendations["recommendations"]:
+            image_category = recommendation["image"]
+            image_url = select_cover_image(cover_images, image_category)
+            recommendation["image"] = get_s3_image_url(image_url)
 
         return recommendations
     except Exception as e:
