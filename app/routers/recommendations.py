@@ -188,6 +188,105 @@ async def generate_recommendations(
         raise HTTPException(status_code=500, detail=str(e))
 
 # @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
+async def generate_recommendations_for_user_request(
+    client: AsyncOpenAI,
+    location: str,
+    archetypes: str,
+    keywords: str,
+    user_request: str,
+    max_recommendations: int = 3,
+    model: str = "gpt-4o-mini"
+) -> List[dict]:
+    """
+    Generate recommendations for a user's request with improved efficiency and reliability.
+    
+    Args:
+        client: The OpenAI client to use
+        location: The location to search in
+        archetypes: User's travel archetypes
+        keywords: User's interests
+        user_request: Specific user request
+        max_recommendations: Maximum number of recommendations to generate
+        model: The model to use for generation
+        
+    Returns:
+        List of unique and validated recommendations
+    """
+    # Build the prompt with clear instructions for uniqueness and validation
+    llm_prompt = f"""
+    Generate up to {max_recommendations} highly relevant and diverse place recommendations based on the following criteria:
+
+    Location: {location}
+    Interests: {keywords}
+    Archetypes: {archetypes}
+    User request: {user_request}
+
+    CRITICAL REQUIREMENTS:
+    1. Each recommendation MUST be a unique, specific place (no duplicates)
+    2. The searchQuery MUST be an exact place name that exists and can be found on Google Maps
+    3. Each place must be relevant to the user's interests and archetypes
+    4. If fewer than {max_recommendations} suitable places exist, return only the valid ones
+    5. Each recommendation must be in a different category from the recommendation_categories list
+    6. The place must be currently open and operational
+
+    Example format for searchQuery:
+    ✓ "Cafe Nola Frederick" (specific place)
+    ✗ "cafes in Frederick" (too general)
+    ✓ "Baker Park Frederick" (specific place)
+    ✗ "parks near Frederick" (too general)
+    """
+
+    # Generate recommendations with a slightly higher temperature for diversity
+    response = await client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": llm_prompt}
+        ],
+        functions=[FUNCTION_SCHEMA],
+        function_call={"name": "generate_recommendation"},
+        temperature=0.7,  # Slightly higher for more diverse results
+        n=max_recommendations
+    )
+    
+    # Process and validate recommendations
+    recommendations = []
+    seen_places = set()  # Track unique places
+    
+    for choice in response.choices:
+        if not choice.message.function_call:
+            continue
+            
+        recommendation = json.loads(choice.message.function_call.arguments)
+        
+        # Skip if we've already seen this place
+        if recommendation["searchQuery"] in seen_places:
+            continue
+            
+        # Validate the recommendation
+        if not all([
+            recommendation["category"] in recommendation_categories,
+            recommendation["searchQuery"],
+            recommendation["usedArchetypes"],
+            recommendation["usedKeywords"],
+            recommendation["recommendedImage"]
+        ]):
+            continue
+            
+        # Add to seen places and recommendations
+        seen_places.add(recommendation["searchQuery"])
+        recommendations.append(recommendation)
+        
+        # If we have enough unique recommendations, stop
+        if len(recommendations) >= max_recommendations:
+            break
+    
+    # If we couldn't generate enough recommendations, log it but return what we have
+    if len(recommendations) < max_recommendations:
+        logger.info(f"Generated {len(recommendations)} recommendations instead of requested {max_recommendations}")
+    
+    return recommendations
+
 async def generate_batch_recommendations(
     client: AsyncOpenAI,
     location: str,
@@ -236,50 +335,6 @@ async def generate_batch_recommendations(
         if choice.message.function_call
     ]
 
-async def generate_recommendations_for_user_request(
-    client: AsyncOpenAI,
-    location: str,
-    archetypes: str,
-    keywords: str,
-    user_request: str,
-    max_recommendations: int = 3,
-    model: str = "gpt-4o-mini"
-) -> List[dict]:
-    """Generate recommendations for a user's request"""
-
-    # Build the prompt
-    llm_prompt = f"""
-    Generate exactly {max_recommendations} highly relevant and diverse places recommendations based on user's interests and archetypes that are around the user's current location.
-
-    - Location: {location}
-    - Interests: {keywords}
-    - Archetypes: {archetypes}
-    - User request: {user_request}
-
-    IMPORTANT:
-    - The recommendations MUST be unique and not repeat the same place
-    - The recommendations MUST be relevant to the user's interests and archetypes
-    - The recommendations MUST be specific places, not general areas or types of places
-    """
-
-    response = await client.chat.completions.create(
-        model=model,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": llm_prompt}
-        ],
-        functions=[FUNCTION_SCHEMA],
-        function_call={"name": "generate_recommendation"},
-        temperature=0.6,  # Slightly lower temperature for more focused results
-        n=max_recommendations
-    )
-    
-    return [
-        json.loads(choice.message.function_call.arguments)
-        for choice in response.choices
-        if choice.message.function_call
-    ]
-
 async def generate_friend_portal_recommendations(
     client: AsyncOpenAI,
     location: str,
@@ -293,30 +348,30 @@ async def generate_friend_portal_recommendations(
 
     # Build the prompt
     llm_prompt = f"""
-    All right, travel partner—let’s line up a handful of spots around {location} that will feel perfectly “us.”
-    I’ll serve up to **{max_recommendations}** ideas, each chosen with your shared archetypes ({archetypes}) in mind, so you and {friend_name} can settle in, swap stories, and enjoy the place itself rather than fuss over the planning.
+    All right, travel partner—let's line up a handful of spots around {location} that will feel perfectly "us."
+    I'll serve up to **{max_recommendations}** ideas, each chosen with your shared archetypes ({archetypes}) in mind, so you and {friend_name} can settle in, swap stories, and enjoy the place itself rather than fuss over the planning.
 
-    For every suggestion I’ll make sure to:
-    1. Pick a single, exact place or activity in {location} (no vague “best cafés nearby” stuff).
-    2. Gently point out why it matches what the two of you typically gravitate toward—letting the place’s vibe and details do the convincing.
-    3. Add the practical bits you’ll actually need: neighborhood, ideal time to go, a tip on what makes it stand out, and why it’s an easy meet‑up spot.
+    For every suggestion I'll make sure to:
+    1. Pick a single, exact place or activity in {location} (no vague "best cafés nearby" stuff).
+    2. Gently point out why it matches what the two of you typically gravitate toward—letting the place's vibe and details do the convincing.
+    3. Add the practical bits you'll actually need: neighborhood, ideal time to go, a tip on what makes it stand out, and why it's an easy meet‑up spot.
 
-    **Extra details I’ll tuck into each entry**
+    **Extra details I'll tuck into each entry**
     - **Title** – short and clear.
-    - **Opening line** – a quick note on how the spot fits both of you (I’ll skip using your name, mention {friend_name} once, and stick to second‑person everywhere else).
+    - **Opening line** – a quick note on how the spot fits both of you (I'll skip using your name, mention {friend_name} once, and stick to second‑person everywhere else).
     - **Personalized note** – a friendly aside connecting the pick to your shared archetypes, without claiming to read your mind.
-    - **TOP 3 KEYWORDS** – chosen from: {", ".join(keywords[:20])}.
-    - **TOP 3 ARCHETYPES** – pulled from {archetypes}.
+    - **TOP 3 KEYWORDS** – chosen from: {", ".join(keywords[:20])}.
+    - **TOP 3 ARCHETYPES** – pulled from {archetypes}.
     - **image** – just the single archetype or keyword that best sums up the recommendation.
 
-    I’ll return everything in **pure JSON**—nothing else—using this structure (watch those commas and quotes!):
+    I'll return everything in **pure JSON**—nothing else—using this structure (watch those commas and quotes!):
 
     {{
     "recommendations": [
         {{
         "title": "Name of Recommendation",
-        "description": "Why this fits both of you, including subtle nods to shared interests and why it’s an inviting place to meet",
-        "practical_tips": "Neighborhood, hours, best time, standout feature, and why it’s an easy rendezvous spot",
+        "description": "Why this fits both of you, including subtle nods to shared interests and why it's an inviting place to meet",
+        "practical_tips": "Neighborhood, hours, best time, standout feature, and why it's an easy rendezvous spot",
         "searchQuery": "Exact Place Name",
         "keywords": ["keyword1", "keyword2", "keyword3"],
         "archetypes": ["archetype1", "archetype2", "archetype3"],
@@ -325,7 +380,7 @@ async def generate_friend_portal_recommendations(
     ]
     }}
 
-    I’ll keep the list varied—no wall‑to‑wall restaurants or all museums—and true to {location}’s character.
+    I'll keep the list varied—no wall‑to‑wall restaurants or all museums—and true to {location}'s character.
     And remember: **only the JSON comes back to you.**
     """
 
