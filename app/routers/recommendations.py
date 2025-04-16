@@ -81,10 +81,7 @@ SYSTEM_PROMPT = """You are a travel assistant specialized in generating EXACT pl
 - prompt: A concise, inviting description of the specific place
 - searchQuery: MUST BE an exact place name (e.g., "Starbucks Downtown Frederick", not "coffee shops in Frederick")
 - usedArchetypes and usedKeywords: Only those relevant to this specific place
-- recommendedImage: Choose based on the place type:
-  * restaurant1 or restaurant2: For specific restaurants or dining venues
-  * relax1 or relax2: For specific relaxation spots, spas, or scenic locations
-  * adventurer1 or adventurer2: For specific activity venues or landmarks
+- recommendedImage: You MUST populate this field with the most representative archetype or keyword for this recommendation (just the term itself, like "adventurer" or "hiking")
 
 IMPORTANT: The searchQuery MUST be an exact place name that exists and can be found on Google Places API.
 """
@@ -148,7 +145,14 @@ async def generate_recommendations(
                 else:
                     processed_recommendations.append(result[0])
             
-            print(processed_recommendations)
+            # Load cover images
+            cover_images = load_cover_images()
+
+            # Iterate through recommendations and add cover images using the value on the recommendedImage field
+            for recommendation in processed_recommendations:
+                image_url = select_cover_image(cover_images, recommendation["recommendedImage"])
+                recommendation["recommendedImage"] = get_s3_image_url(image_url)
+
             return [Recommendation(id=str(uuid.uuid4()), **rec) for rec in processed_recommendations]
             
     except Exception as e:
