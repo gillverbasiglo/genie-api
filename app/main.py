@@ -15,8 +15,7 @@ from .common import app, get_current_user
 from .config import settings
 from .routers.google_places_endpoints import router as GooglePlacesEndpoints
 from .routers.trip_advisor_endpoints import router as TripAdvisorEndpoints
-from .routers.invitation_endpoints import router as InvitationsEndpoints
-from .routers.invite_code_endpoints import router as InviteCodeEndpoints
+from .routers.users.invitation_endpoints import router as InvitationsEndpoints
 from .routers.sharing_endpoints import router as SharingEndpoints
 from .routers.apple_site_association_endpoint import router as AppleSiteAssociationEndpoint
 from .routers.recommendations import router as RecommendationsEndpoints
@@ -34,7 +33,6 @@ cache = TTLCache(maxsize=1, ttl=3600)
 app.include_router(TripAdvisorEndpoints)
 app.include_router(GooglePlacesEndpoints)
 app.include_router(InvitationsEndpoints)
-app.include_router(InviteCodeEndpoints)
 app.include_router(AppleSiteAssociationEndpoint)
 app.include_router(SharingEndpoints)
 app.include_router(RecommendationsEndpoints)
