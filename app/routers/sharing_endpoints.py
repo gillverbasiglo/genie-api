@@ -6,7 +6,7 @@ from typing import List, Dict, Any
 from pydantic import BaseModel
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from ..init_db import get_db
@@ -151,7 +151,7 @@ async def send_push_notifications(device_tokens: List[DeviceToken], notification
 @router.post("/recommendation", response_model=ShareResponse)
 async def share_content(
     share_data: ShareCreate, 
-    db: Session = Depends(get_db), 
+    db: AsyncSession = Depends(get_db), 
     current_user: dict = Depends(get_current_user)
 ):
     logger.debug("Entering in Share")

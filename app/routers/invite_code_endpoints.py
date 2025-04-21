@@ -3,7 +3,7 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException
 from datetime import datetime
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import InvitationCode
 from app.models.invite_code_create import InviteCodeCreate
 from ..init_db import get_db
@@ -19,7 +19,7 @@ router = APIRouter(prefix="/invitations", tags=["invitations"])
 
 
 @router.post("/validate-code/", dependencies=[Depends(get_current_user)])
-async def validate_code(code: str, db: Session = Depends(get_db)):
+async def validate_code(code: str, db: AsyncSession = Depends(get_db)):
     db_code = db.query(InvitationCode).filter(InvitationCode.code == code).first()
     if not db_code:
         raise HTTPException(status_code=404, detail="Invite Code not found")
@@ -32,7 +32,7 @@ async def validate_code(code: str, db: Session = Depends(get_db)):
     return {"message": "Invite Code is valid"}
 
 @router.post("/create-invite-code/", dependencies=[Depends(get_current_user)])
-def create_invite_code(invite_code: InviteCodeCreate, db: Session = Depends(get_db)):
+def create_invite_code(invite_code: InviteCodeCreate, db: AsyncSession = Depends(get_db)):
     # Check if code already exists
     db_code = db.query(InvitationCode).filter(InvitationCode.code == invite_code.code).first()
     if db_code:

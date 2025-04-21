@@ -11,7 +11,7 @@ from fastapi_cache.decorator import cache
 from openai import AsyncOpenAI
 from pydantic import BaseModel
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 from enum import Enum
 from tenacity import retry, stop_after_attempt, wait_exponential
@@ -132,7 +132,7 @@ FUNCTION_SCHEMA = {
 # @cache(expire=timedelta(hours=24), key_builder=lambda r: f"{r.location}:{r.archetypes}:{r.keywords}")
 async def generate_recommendations(
     request: RecommendationRequest,
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     try:
         client = groq_client if request.provider == "groq" else openai_client
@@ -431,7 +431,7 @@ class FriendPortalRecommendationRequest(BaseModel):
 async def get_friend_portal_recommendations(
     friend_id: str,
     request: FriendPortalRecommendationRequest,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     if current_user["uid"] == friend_id:

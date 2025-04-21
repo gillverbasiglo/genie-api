@@ -1,12 +1,8 @@
-from sqlalchemy import create_engine
-from .database import engine, Base
-from sqlalchemy.orm import sessionmaker
-from .database import SessionLocal
-from .config import settings
+from .database import AsyncSessionLocal
 
-def get_db():
-    db = SessionLocal()
+async def get_db():
+    db = AsyncSessionLocal()
     try:
         yield db
     finally:
-        db.close()
+        await db.close()
