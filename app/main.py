@@ -21,6 +21,8 @@ from .routers.apple_site_association_endpoint import router as AppleSiteAssociat
 from .routers.recommendations import router as RecommendationsEndpoints
 from .routers.device_token_endpoints import router as DeviceTokenEndpoints
 from .routers.search import router as SearchEndpoints
+from .routers.users.friends import router as FriendsEndpoints
+from .routers.users.user_and_contacts import router as UserAndContacts
 from .init_db import get_db
 from app.models import User
 
@@ -38,6 +40,8 @@ app.include_router(SharingEndpoints)
 app.include_router(RecommendationsEndpoints)
 app.include_router(DeviceTokenEndpoints)
 app.include_router(SearchEndpoints)
+app.include_router(FriendsEndpoints)
+app.include_router(UserAndContacts)
 
 # Global clients
 groq_client = AsyncOpenAI(

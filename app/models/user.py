@@ -1,7 +1,10 @@
-from sqlalchemy import Column, String, DateTime, ForeignKey, ARRAY
+from sqlalchemy import Column, String, DateTime, ForeignKey, ARRAY, Boolean, Enum
 from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
+
 from ..database import Base
 from datetime import datetime, timezone
+from ..schemas.users import UserStatus
 
 class User(Base):
     __tablename__ = "users"
@@ -14,6 +17,9 @@ class User(Base):
     invited_by = Column(String, ForeignKey("users.id"), nullable=True)
     archetypes = Column(ARRAY(String), nullable=True)
     keywords = Column(ARRAY(String), nullable=True)
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    is_active = Column(Boolean, default=True)
+    status = Column(Enum(UserStatus), default=UserStatus.ACTIVE)
     
     # Relationships
     sent_invites = relationship("Invitation", back_populates="inviter", foreign_keys="Invitation.inviter_id")
@@ -23,4 +29,13 @@ class User(Base):
     sent_shares = relationship("Share", foreign_keys="Share.from_user_id", back_populates="from_user")
     received_shares = relationship("Share", foreign_keys="Share.to_user_id", back_populates="to_user")
     notifications = relationship("Notification", back_populates="user")
-    
+
+    # Relationships for friends and requests
+    sent_friend_requests = relationship("FriendRequest", foreign_keys="FriendRequest.from_user_id", back_populates="from_user")
+    received_friend_requests = relationship("FriendRequest", foreign_keys="FriendRequest.to_user_id", back_populates="to_user")
+    friends = relationship("Friend", foreign_keys="Friend.user_id", back_populates="user")
+    friend_of = relationship("Friend", foreign_keys="Friend.friend_id", back_populates="friend")
+    blocked_users = relationship("UserBlock", foreign_keys="UserBlock.blocker_id", back_populates="blocker")
+    blocked_by = relationship("UserBlock", foreign_keys="UserBlock.blocked_id", back_populates="blocked")
+    reports_filed = relationship("UserReport", foreign_keys="UserReport.reporter_id", back_populates="reporter")
+    reports_received = relationship("UserReport", foreign_keys="UserReport.reported_id", back_populates="reported")
