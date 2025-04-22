@@ -1,12 +1,13 @@
 import logging
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-from sqlalchemy import select, and_, or_
+from sqlalchemy.orm import joinedload
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, and_, or_, delete
 
 from ...init_db import get_db
 from ...common import get_current_user
-from app.models import User, FriendRequest, Friend, UserBlock
+from app.models import User, FriendRequest, Friend, UserBlock, UserReport
 from ...schemas.friends import (
     FriendRequestCreate,
     FriendRequestResponse,
@@ -28,31 +29,37 @@ logger = logging.getLogger(__name__)
 @router.post("/request", response_model=FriendRequestResponse)
 async def send_friend_request(
     request: FriendRequestCreate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
     """
     Send a friend request to another user
     """
+
+    if current_user["uid"] == request.to_user_id:
+        raise HTTPException(status_code=400, detail="I know you're awesome but you can't be friend with yourself.")
+    
     # Check if target user exists
-    target_user = db.execute(select(User).where(User.id == request.to_user_id)).scalar_one_or_none()
+    results = await db.execute(select(User).where(User.id == request.to_user_id))
+    target_user = results.scalar_one_or_none()
     if not target_user:
         raise HTTPException(status_code=404, detail="User not found")
 
     # Check if users are already friends
-    existing_friend = db.execute(
-        select(Friend).where(
-            or_(
-                and_(Friend.user_id == current_user['uid'], Friend.friend_id == request.to_user_id),
-                and_(Friend.user_id == request.to_user_id, Friend.friend_id == current_user['uid'])
-            )
+    stmt = select(Friend).where(
+        or_(
+            and_(Friend.user_id == current_user['uid'], Friend.friend_id == request.to_user_id),
+            and_(Friend.user_id == request.to_user_id, Friend.friend_id == current_user['uid'])
         )
-    ).scalar_one_or_none()
+    )
+    results = await db.execute(stmt)
+    existing_friend = results.scalars().all()
+
     if existing_friend:
         raise HTTPException(status_code=400, detail="Users are already friends")
 
     # Check for existing friend request
-    existing_request = db.execute(
+    results = await db.execute(
         select(FriendRequest).where(
             or_(
                 and_(
@@ -67,19 +74,22 @@ async def send_friend_request(
                 )
             )
         )
-    ).scalar_one_or_none()
+    )
+    existing_request = results.scalar_one_or_none()
+    
     if existing_request:
         raise HTTPException(status_code=400, detail="Friend request already exists")
 
     # Check if either user has blocked the other
-    block_exists = db.execute(
+    block_exists = await db.execute(
         select(UserBlock).where(
             or_(
                 and_(UserBlock.blocker_id == current_user['uid'], UserBlock.blocked_id == request.to_user_id),
                 and_(UserBlock.blocker_id == request.to_user_id, UserBlock.blocked_id == current_user['uid'])
             )
         )
-    ).scalar_one_or_none()
+    )
+    block_exists = block_exists.scalar_one_or_none()
     if block_exists:
         raise HTTPException(status_code=400, detail="Cannot send friend request to blocked user")
 
@@ -90,45 +100,43 @@ async def send_friend_request(
         status=FriendRequestStatus.PENDING
     )
     db.add(friend_request)
-    db.commit()
-    db.refresh(friend_request)
+    await db.commit()
+    await db.refresh(friend_request)
 
     return friend_request
 
 @router.get("/requests", response_model=List[FriendRequestResponse])
 async def get_friend_requests(
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
     """
     Get all friend requests (sent and received)
     """
-    requests = db.execute(
+    results = await db.execute(
         select(FriendRequest).where(
             or_(
                 FriendRequest.from_user_id == current_user['uid'],
                 FriendRequest.to_user_id == current_user['uid']
             )
         )
-    ).scalars().all()
+    )
+    requests = results.scalars().all()
     return requests
 
 @router.patch("/request/{request_id}", response_model=FriendRequestResponse)
 async def update_friend_request(
     request_id: str,
     update: FriendRequestUpdate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
     """
     Update a friend request status (accept/reject/cancel)
     """
-    friend_request = db.execute(
-        select(FriendRequest).where(
-            FriendRequest.id == request_id,
-            FriendRequest.to_user_id == current_user['uid']
-        )
-    ).scalar_one_or_none()
+
+    result = await db.execute(select(FriendRequest).where(FriendRequest.id == request_id, FriendRequest.to_user_id == current_user['uid']))
+    friend_request = result.scalar_one_or_none()
 
     if not friend_request:
         raise HTTPException(status_code=404, detail="Friend request not found")
@@ -137,8 +145,8 @@ async def update_friend_request(
         raise HTTPException(status_code=400, detail="Friend request is not pending")
 
     friend_request.status = update.status
-    db.commit()
-    db.refresh(friend_request)
+    await db.commit()
+    await db.refresh(friend_request)
 
     # If request is accepted, create friend relationship
     if update.status == FriendRequestStatus.ACCEPTED:
@@ -146,31 +154,42 @@ async def update_friend_request(
         friendship1 = Friend(user_id=friend_request.from_user_id, friend_id=friend_request.to_user_id)
         friendship2 = Friend(user_id=friend_request.to_user_id, friend_id=friend_request.from_user_id)
         db.add_all([friendship1, friendship2])
-        db.commit()
+        await db.commit()
+        await db.refresh(friend_request)
+    
+    response_data = {
+        "id": friend_request.id,
+        "from_user_id": friend_request.from_user_id,
+        "to_user_id": friend_request.to_user_id,
+        "status": friend_request.status,
+        "created_at": friend_request.created_at,
+        "updated_at": friend_request.updated_at
+    }
 
-    return friend_request
-
+    return response_data
+    
 @router.get("/status/{user_id}", response_model=FriendStatusResponse)
 async def get_friend_status(
     user_id: str,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
     """
     Get the friendship status between current user and another user
     """
     # Check if users are friends
-    is_friend = db.execute(
+    results = await db.execute(
         select(Friend).where(
             or_(
                 and_(Friend.user_id == current_user['uid'], Friend.friend_id == user_id),
                 and_(Friend.user_id == user_id, Friend.friend_id == current_user['uid'])
             )
         )
-    ).scalar_one_or_none() is not None
+    )
+    is_friend = results.scalar_one_or_none() is not None
 
     # Check for pending friend request
-    friend_request = db.execute(
+    results = await db.execute(
         select(FriendRequest).where(
             or_(
                 and_(
@@ -185,22 +204,25 @@ async def get_friend_status(
                 )
             )
         )
-    ).scalar_one_or_none()
+    )
+    friend_request = results.scalar_one_or_none()
 
     # Check if either user has blocked the other
-    is_blocked = db.execute(
+    results = await db.execute(
         select(UserBlock).where(
             UserBlock.blocker_id == current_user['uid'],
             UserBlock.blocked_id == user_id
         )
-    ).scalar_one_or_none() is not None
+    )
+    is_blocked = results.scalar_one_or_none() is not None
 
-    is_blocked_by = db.execute(
+    results = await db.execute(
         select(UserBlock).where(
             UserBlock.blocker_id == user_id,
             UserBlock.blocked_id == current_user['uid']
         )
-    ).scalar_one_or_none() is not None
+    )
+    is_blocked_by = results.scalar_one_or_none() is not None
 
     return FriendStatusResponse(
         is_friend=is_friend,
@@ -213,24 +235,30 @@ async def get_friend_status(
 @router.post("/block", response_model=UserBlockResponse)
 async def block_user(
     block: UserBlockCreate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
     """
     Block a user
     """
+    if current_user['uid'] == block.blocked_id:
+        raise HTTPException(status_code=400, detail="You can't block yourself")
+
     # Check if target user exists
-    target_user = db.execute(select(User).where(User.id == block.blocked_id)).scalar_one_or_none()
+    target_user = await db.execute(select(User).where(User.id == block.blocked_id))
+    target_user = target_user.scalar_one_or_none()
     if not target_user:
         raise HTTPException(status_code=404, detail="User not found")
 
     # Check if already blocked
-    existing_block = db.execute(
+    existing_block = await db.execute(
         select(UserBlock).where(
             UserBlock.blocker_id == current_user['uid'],
             UserBlock.blocked_id == block.blocked_id
         )
-    ).scalar_one_or_none()
+    )
+    existing_block = existing_block.scalar_one_or_none()
+    
     if existing_block:
         raise HTTPException(status_code=400, detail="User is already blocked")
 
@@ -240,21 +268,20 @@ async def block_user(
         blocked_id=block.blocked_id,
         reason=block.reason
     )
-    db.add(user_block)
 
     # Remove any existing friend relationships
-    db.execute(
-        select(Friend).where(
+    await db.execute(
+        delete(Friend).where(
             or_(
                 and_(Friend.user_id == current_user['uid'], Friend.friend_id == block.blocked_id),
                 and_(Friend.user_id == block.blocked_id, Friend.friend_id == current_user['uid'])
             )
         )
-    ).scalars().all()
+    )
 
     # Cancel any pending friend requests
-    db.execute(
-        select(FriendRequest).where(
+    await db.execute(
+        delete(FriendRequest).where(
             or_(
                 and_(
                     FriendRequest.from_user_id == current_user['uid'],
@@ -268,48 +295,52 @@ async def block_user(
                 )
             )
         )
-    ).scalars().all()
+    )
 
-    db.commit()
-    db.refresh(user_block)
+    db.add(user_block)
+    await db.commit()
+    await db.refresh(user_block)
 
     return user_block
 
-@router.delete("/block/{user_id}")
+@router.delete("/unblock/{user_id}")
 async def unblock_user(
     user_id: str,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
     """
     Unblock a user
     """
-    block = db.execute(
+    block = await db.execute(
         select(UserBlock).where(
             UserBlock.blocker_id == current_user['uid'],
             UserBlock.blocked_id == user_id
         )
-    ).scalar_one_or_none()
+    )
+    block = block.scalar_one_or_none()
 
     if not block:
         raise HTTPException(status_code=404, detail="User is not blocked")
 
-    db.delete(block)
-    db.commit()
+    await db.delete(block)
+    await db.commit()
 
     return {"message": "User unblocked successfully"}
 
 @router.post("/report", response_model=UserReportResponse)
 async def report_user(
     report: UserReportCreate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
     """
     Report a user
     """
     # Check if target user exists
-    target_user = db.execute(select(User).where(User.id == report.reported_id)).scalar_one_or_none()
+    target_user = await db.execute(select(User).where(User.id == report.reported_id))
+    target_user = target_user.scalar_one_or_none()
+
     if not target_user:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -321,28 +352,31 @@ async def report_user(
         description=report.description
     )
     db.add(user_report)
-    db.commit()
-    db.refresh(user_report)
+    await db.commit()
+    await db.refresh(user_report)
 
     return user_report
 
 @router.get("/list", response_model=List[FriendResponse])
 async def get_friends(
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
     """
     Get list of all friends
     """
-    friends = db.execute(
-        select(Friend).where(Friend.user_id == current_user['uid'])
-    ).scalars().all()
+    friends = await db.execute(
+        select(Friend)
+        .options(joinedload(Friend.friend))
+        .where(Friend.user_id == current_user['uid'])
+    )
+    friends = friends.scalars().all()
     return friends
 
 @router.delete("/{friend_id}")
 async def remove_friend(
     friend_id: str,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
     """
@@ -358,6 +392,6 @@ async def remove_friend(
         )
     ).scalars().all()
 
-    db.commit()
+    await db.commit()
 
     return {"message": "Friend removed successfully"}

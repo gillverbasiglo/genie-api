@@ -2,7 +2,7 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
 from pydantic import BaseModel
@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from ...init_db import get_db
 from app.models import User, Invitation
 from ...schemas.invitation import ContactCheckResponse
-from ...schemas.users import UserCreate
+from ...schemas.users import UserCreate, MeUserResponse, UpdateArchetypesAndKeywordsRequest
 from ...common import get_current_user
 
 # Configure logging
@@ -20,11 +20,56 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/users", tags=["users"])
 
+
+@router.post("/update-archetypes-and-keywords", response_model=None)
+async def update_archetypes_and_keywords(
+    request: UpdateArchetypesAndKeywordsRequest, 
+    db: AsyncSession = Depends(get_db), 
+    current_user: dict = Depends(get_current_user)
+    ):
+    user = await db.execute(select(User).where(User.id == current_user["uid"]))
+    user = user.scalar_one_or_none()
+    if user is None:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found"
+        )
+
+    user.archetypes = request.archetypes
+    user.keywords = request.keywords
+
+    await db.commit()
+    await db.refresh(user)
+
+    return {
+        "archetypes": user.archetypes,
+        "keywords": user.keywords
+    }
+
+@router.get("/me", response_model=MeUserResponse)
+async def get_current_user_info(
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    # Get user details from database
+    stmt = select(User).where(User.id == current_user["uid"])
+    user = await db.execute(stmt)
+    user = user.scalar_one_or_none()
+    
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found in database"
+        )
+
+    return user
+
+
 @router.post("/check-contacts", response_model=List[ContactCheckResponse])
 async def check_contacts(
     phone_numbers: List[str],
     current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     # Check if user exists
     stmt = select(User).where(User.id == current_user["uid"])
@@ -68,7 +113,7 @@ async def check_contacts(
 async def register_user(
     user_data: UserCreate,
     current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     try:
         # Create new user
@@ -96,8 +141,8 @@ async def register_user(
                 new_user.invited_by = invitation.inviter_id
 
         db.add(new_user)
-        db.commit()
-        db.refresh(new_user)
+        await db.commit()
+        await db.refresh(new_user)
 
         return {
             "message": "User registered successfully",

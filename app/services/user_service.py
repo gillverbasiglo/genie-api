@@ -1,20 +1,25 @@
 from app.models import User
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import Optional
 
-def get_user_by_id(db: Session, user_id: str) -> Optional[User]:
+async def get_user_by_id(db: AsyncSession, user_id: str) -> Optional[User]:
     query = select(User).where(User.id == user_id)
-    return db.execute(query).scalar_one_or_none()
+    query = await db.execute(query)
+    return query.scalar_one_or_none()
 
-def get_user_by_email(db: Session, email: str) -> Optional[User]:
+async def get_user_by_email(db: AsyncSession, email: str) -> Optional[User]:
     query = select(User).where(User.email == email)
-    return db.execute(query).scalar_one_or_none()
+    query = await db.execute(query)
+    return query.scalar_one_or_none()
 
-def get_user_by_phone(db: Session, phone: str) -> Optional[User]:
+async def get_user_by_phone(db: AsyncSession, phone: str) -> Optional[User]:
     query = select(User).where(User.phone == phone)
+    query = await db.execute(query)
     return db.execute(query).scalar_one_or_none()
 
-def create_user(db: Session, user: User) -> User:
+async def create_user(db: AsyncSession, user: User) -> User:
     db.add(user)
-    db.commit()
+    await db.commit()
+    await db.refresh(user)
+    return user

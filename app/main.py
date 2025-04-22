@@ -57,32 +57,6 @@ class TextRequest(BaseModel):
     text: str
     provider: str = "groq"
 
-@app.get("/me")
-async def get_current_user_info(
-    current_user: dict = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    # Get user details from database
-    stmt = select(User).where(User.id == current_user["uid"])
-    user = await db.execute(stmt).scalar_one_or_none()
-    
-    if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found in database"
-        )
-
-    return {
-        "id": user.id,
-        "phone_number": user.phone_number,
-        "email": user.email,
-        "display_name": user.display_name,
-        "created_at": user.created_at,
-        "invited_by": user.invited_by,
-        "archetypes": user.archetypes,
-        "keywords": user.keywords
-    }
-
 @app.post("/process-text")
 async def process_text(
     request: TextRequest
@@ -218,29 +192,4 @@ async def web_search(request: WebSearchRequest):
             status_code=500,
             detail=f"Error performing web search: {str(e)}"
         )
-
-class UpdateArchetypesAndKeywordsRequest(BaseModel):
-    archetypes: List[str]
-    keywords: List[str]
-
-@app.post("/update-archetypes-and-keywords", response_model=None)
-async def update_archetypes_and_keywords(request: UpdateArchetypesAndKeywordsRequest, db: AsyncSession = Depends(get_db), current_user: dict = Depends(get_current_user)):
-    stmt = select(User).where(User.id == current_user["uid"])
-    user = db.execute(stmt).scalar_one_or_none()
-    if user is None:
-        raise HTTPException(
-            status_code=404,
-            detail="User not found"
-        )
-
-    user.archetypes = request.archetypes
-    user.keywords = request.keywords
-
-    db.commit()
-    db.refresh(user)
-
-    return {
-        "archetypes": user.archetypes,
-        "keywords": user.keywords
-    }
 

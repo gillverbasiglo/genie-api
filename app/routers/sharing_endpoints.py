@@ -176,8 +176,8 @@ async def share_content(
         message=share_data.message
     )
     db.add(share)
-    db.commit()
-    db.refresh(share)
+    await db.commit()
+    await db.refresh(share)
     logger.debug("Added Share")
     
     # Create notification

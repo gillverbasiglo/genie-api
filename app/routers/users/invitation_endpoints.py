@@ -61,7 +61,7 @@ async def validate_code(code: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/create-invite-code/", dependencies=[Depends(get_current_user)])
-def create_invite_code(invite_code: InviteCodeCreate, db: AsyncSession = Depends(get_db)):
+async def create_invite_code(invite_code: InviteCodeCreate, db: AsyncSession = Depends(get_db)):
     # Check if code already exists
     db_code = db.query(InvitationCode).filter(InvitationCode.code == invite_code.code).first()
     if db_code:
@@ -74,8 +74,8 @@ def create_invite_code(invite_code: InviteCodeCreate, db: AsyncSession = Depends
     )
 
     db.add(new_code)
-    db.commit()
-    db.refresh(new_code)
+    await db.commit()
+    await db.refresh(new_code)
 
     return {"message": "Invitation code created successfully", "code": new_code.code}
 
@@ -126,9 +126,9 @@ async def send_invitation(
     
     if new_invitations:
         db.add_all(new_invitations)
-        db.commit()
+        await db.commit()
         for invitation in new_invitations:
-            db.refresh(invitation)
+            await db.refresh(invitation)
     
     return new_invitations
 
