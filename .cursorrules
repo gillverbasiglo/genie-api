@@ -32,7 +32,7 @@
   Dependencies
   - FastAPI
   - Pydantic v2
-  - Psycopg2
+  - Psycopg3
   - SQLAlchemy 2.0 (if using ORM features)
   - Alembic
   
