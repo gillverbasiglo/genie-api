@@ -5,7 +5,8 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
 from pydantic import BaseModel
 from datetime import datetime
@@ -81,7 +82,7 @@ class PendingInvitationResponse(BaseModel):
 async def send_invitation(
     invitation_data: BulkInvitationCreate,
     current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     # Check if user exists
     stmt = select(User).where(User.id == current_user["uid"])
@@ -129,10 +130,11 @@ async def send_invitation(
     
     return new_invitations
 
+
 @router.get("/stats", response_model=dict)
 async def get_invitation_stats(
     current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     # Get total invitations sent
     stmt = select(func.count()).select_from(Invitation).where(Invitation.inviter_id == current_user["uid"])
@@ -154,7 +156,7 @@ async def get_invitation_stats(
 async def get_pending_invitations(
     phone_numbers: List[str],
     current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     # Get all pending invitations for these phone numbers
     stmt = select(Invitation).where(

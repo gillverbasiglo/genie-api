@@ -11,7 +11,7 @@ from fastapi_cache.decorator import cache
 from openai import AsyncOpenAI
 from pydantic import BaseModel
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 from enum import Enum
 from tenacity import retry, stop_after_attempt, wait_exponential
@@ -78,6 +78,17 @@ keywords = [
     "spa", "meditation", "yoga retreats"
 ]
 
+global_archetypes = [
+    "adventurer", "nature-lover", "urban-culture", "cultural-explorer",
+    "lifestyle", "photographer", "minimalist", "ocean-lover",
+    "food-traveler", "fitness", "wellness", "animal-lover",
+    "art-aficionado", "science-enthusiast", "family-oriented",
+    "bohemian", "sunset-chaser", "work-motivated", "festival-goer",
+    "fashion-enthusiast", "landscape-enthusiast", "luxury-lover",
+    "teen", "young", "adult", "senior", "daytime", "nighttime",
+    "sociable", "solitary"
+]
+
 # Define the system prompt
 SYSTEM_PROMPT = """You are a travel assistant specialized in generating EXACT place recommendations. Your recommendations must be specific places, not general areas or types of places. Each recommendation must be returned through the generate_recommendation function with:
 
@@ -110,7 +121,7 @@ FUNCTION_SCHEMA = {
             "usedKeywords": {"type": "array", "items": {"type": "string"}},
             "recommendedImage": {
                 "type": "string",
-                "enum": ["restaurant1", "restaurant2", "relax1", "relax2", "adventurer1", "adventurer2"]
+                "enum": keywords + global_archetypes
             }
         },
         "required": ["category", "prompt", "searchQuery", "usedArchetypes", "usedKeywords", "recommendedImage"]
@@ -121,7 +132,7 @@ FUNCTION_SCHEMA = {
 # @cache(expire=timedelta(hours=24), key_builder=lambda r: f"{r.location}:{r.archetypes}:{r.keywords}")
 async def generate_recommendations(
     request: RecommendationRequest,
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     try:
         client = groq_client if request.provider == "groq" else openai_client
@@ -228,6 +239,8 @@ async def generate_recommendations_for_user_request(
     4. If fewer than {max_recommendations} suitable places exist, return only the valid ones
     5. Each recommendation must be in a different category from the recommendation_categories list
     6. The place must be currently open and operational
+    7. The place must be within 50 miles of the {location} area
+    8. the recommendedImage MUST be a valid archetype or keyword related to the category of the recommendation. If you are talking about a restaurant, the recommendedImage should be related to restaurants or eating out. If you are talking about a coffee shop, the recommendedImage should be related to coffee shops.
 
     Example format for searchQuery:
     ✓ "Cafe Nola Frederick" (specific place)
@@ -245,7 +258,7 @@ async def generate_recommendations_for_user_request(
         ],
         functions=[FUNCTION_SCHEMA],
         function_call={"name": "generate_recommendation"},
-        temperature=0.7,  # Slightly higher for more diverse results
+        temperature=0.6,  # Slightly higher for more diverse results
         n=max_recommendations
     )
     
@@ -309,6 +322,8 @@ async def generate_batch_recommendations(
     2. The place must actually exist and be findable on Google Maps
     3. The place must be relevant to the user's interests and archetypes
     4. The recommendation must be for a specific venue, not a type of place
+    5. The place must be within 50 miles of the {location} area
+    6. the recommendedImage MUST be a valid archetype or keyword related to the category. If you are talking about a restaurant, the recommendedImage should be related to restaurants or eating out. If you are talking about a coffee shop, the recommendedImage should be related to coffee shops.
 
     Example format for searchQuery:
     ✓ "Cafe Nola Frederick" (specific place)
@@ -362,7 +377,7 @@ async def generate_friend_portal_recommendations(
     - **Personalized note** – a friendly aside connecting the pick to your shared archetypes, without claiming to read your mind.
     - **TOP 3 KEYWORDS** – chosen from: {", ".join(keywords[:20])}.
     - **TOP 3 ARCHETYPES** – pulled from {archetypes}.
-    - **image** – just the single archetype or keyword that best sums up the recommendation.
+    - **image** – just the single archetype or keyword that best sums up the recommendation and is on the list of keywords and archetypes.
 
     I'll return everything in **pure JSON**—nothing else—using this structure (watch those commas and quotes!):
 
@@ -382,6 +397,10 @@ async def generate_friend_portal_recommendations(
 
     I'll keep the list varied—no wall‑to‑wall restaurants or all museums—and true to {location}'s character.
     And remember: **only the JSON comes back to you.**
+
+    IMPORTANT:
+    - image most releavent term from the keywords and archetypes list: {", ".join(keywords + global_archetypes)}
+    - searchQuery must be an exact place name that exists and can be found on Google Places API and must be within 50 miles of the {location} area
     """
 
     response = await client.chat.completions.create(
@@ -412,7 +431,7 @@ class FriendPortalRecommendationRequest(BaseModel):
 async def get_friend_portal_recommendations(
     friend_id: str,
     request: FriendPortalRecommendationRequest,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     if current_user["uid"] == friend_id:

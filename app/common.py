@@ -8,10 +8,42 @@ from typing import Dict, List
 
 from app.config import settings
 from .init_db import get_db
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from .models.user import User
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    global firebase_app
+    if settings.environment == "production":
+        try:
+            # Import Firebase credentials
+            from firebase_admin import credentials as fb_credentials
+            
+            # Create a credential object
+            cred = fb_credentials.ApplicationDefault()
+            
+            # Initialize Firebase with explicit credentials
+            firebase_app = initialize_app(
+                credential=cred,
+                options={
+                    'projectId': 'genia-ai-19a34'
+                }
+            )
+            logger.info("Firebase initialized successfully")
+        except Exception as e:
+            logger.exception(f"Error initializing Firebase")
+            raise e
+    else:
+        logger.info("Running in development mode - skipping Firebase initialization")
+    
+    yield
+    
+    # Shutdown
+    if firebase_app:
+        firebase_app.delete()
+
+app = FastAPI(lifespan=lifespan)
 security = HTTPBearer()
 
 # Configure CORS
@@ -50,11 +82,6 @@ class ConnectionManager:
             for connection in self.active_connections[user_id]:
                 await connection.send_json(message)
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Startup
-    firebase_app = None
-
 manager = ConnectionManager()
 
 
@@ -90,7 +117,7 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
 async def websocket_endpoint(
     websocket: WebSocket,
     user_id: str,
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     try:
         # Check if user exists
@@ -111,28 +138,3 @@ async def websocket_endpoint(
         logger.error(f"WebSocket error: {e}")
         for user_id in manager.active_connections:
             manager.disconnect(websocket, user_id)
-
-@app.on_event("startup")
-async def startup_event():
-    global firebase_app
-    if settings.environment == "production":
-        try:
-            # Import Firebase credentials
-            from firebase_admin import credentials as fb_credentials
-            
-            # Create a credential object
-            cred = fb_credentials.ApplicationDefault()
-            
-            # Initialize Firebase with explicit credentials
-            firebase_app = initialize_app(
-                credential=cred,
-                options={
-                    'projectId': 'genia-ai-19a34'
-                }
-            )
-            logger.info("Firebase initialized successfully")
-        except Exception as e:
-            logger.exception(f"Error initializing Firebase")
-            raise e
-    else:
-        logger.info("Running in development mode - skipping Firebase initialization")

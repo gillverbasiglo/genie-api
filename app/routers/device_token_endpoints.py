@@ -1,6 +1,6 @@
 import logging
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from datetime import datetime
 
@@ -17,7 +17,7 @@ router = APIRouter(prefix="/device-tokens", tags=["device-tokens"])
 async def register_device_token(
     device_token_data: DeviceTokenCreate,
     current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Register a new device token for push notifications
@@ -61,7 +61,7 @@ async def register_device_token(
 async def unregister_device_token(
     token: str,
     current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Unregister a device token (mark as inactive)
@@ -71,7 +71,7 @@ async def unregister_device_token(
             DeviceToken.user_id == current_user["uid"],
             DeviceToken.token == token
         )
-        device_token = db.execute(stmt).scalar_one_or_none()
+        device_token = await db.execute(stmt).scalar_one_or_none()
         
         if not device_token:
             raise HTTPException(

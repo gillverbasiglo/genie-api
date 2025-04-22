@@ -6,7 +6,7 @@ from fastapi import Depends, HTTPException, status, Response
 from firebase_admin import auth
 from openai import AsyncOpenAI, OpenAIError
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from tavily import TavilyClient
 from typing import Optional, List, Literal
@@ -60,11 +60,11 @@ class TextRequest(BaseModel):
 @app.get("/me")
 async def get_current_user_info(
     current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     # Get user details from database
     stmt = select(User).where(User.id == current_user["uid"])
-    user = db.execute(stmt).scalar_one_or_none()
+    user = await db.execute(stmt).scalar_one_or_none()
     
     if user is None:
         raise HTTPException(
@@ -224,7 +224,7 @@ class UpdateArchetypesAndKeywordsRequest(BaseModel):
     keywords: List[str]
 
 @app.post("/update-archetypes-and-keywords", response_model=None)
-async def update_archetypes_and_keywords(request: UpdateArchetypesAndKeywordsRequest, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+async def update_archetypes_and_keywords(request: UpdateArchetypesAndKeywordsRequest, db: AsyncSession = Depends(get_db), current_user: dict = Depends(get_current_user)):
     stmt = select(User).where(User.id == current_user["uid"])
     user = db.execute(stmt).scalar_one_or_none()
     if user is None:
