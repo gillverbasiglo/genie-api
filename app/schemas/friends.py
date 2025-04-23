@@ -2,7 +2,7 @@ from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
 from enum import Enum as PyEnum
-from .users import UserFriendResponse
+from .users import UserFriendResponse, MeUserResponse
 
 class FriendRequestStatus(str, PyEnum):
     PENDING = "pending"
@@ -24,7 +24,8 @@ class FriendRequestCreate(FriendRequestBase):
 
 class FriendRequestResponse(FriendRequestBase):
     id: str
-    from_user_id: str
+    from_user: MeUserResponse
+    to_user: MeUserResponse
     status: FriendRequestStatus
     created_at: datetime
     updated_at: Optional[datetime] = None
@@ -84,4 +85,10 @@ class FriendStatusResponse(BaseModel):
     is_blocked: bool
     is_blocked_by: bool
     friend_request_id: Optional[str] = None 
+
+
+class FriendRequestType(str, PyEnum):
+    SENT = "sent"
+    RECEIVED = "received"
+    ALL = "all"
 

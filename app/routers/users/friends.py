@@ -18,7 +18,8 @@ from ...schemas.friends import (
     UserBlockResponse,
     UserReportCreate,
     UserReportResponse,
-    FriendRequestStatus
+    FriendRequestStatus,
+    FriendRequestType
 )
 
 router = APIRouter(prefix="/friends", tags=["friends"])
@@ -107,21 +108,55 @@ async def send_friend_request(
 
 @router.get("/requests", response_model=List[FriendRequestResponse])
 async def get_friend_requests(
+    request_type: FriendRequestType = FriendRequestType.ALL,
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
     """
-    Get all friend requests (sent and received)
+    Get friend requests with filtering options
+    
+    Parameters:
+    - status: Filter by request status (default: PENDING)
+    - request_type: Filter by request type: 
+        'sent' - requests you sent
+        'received' - requests you received
+        'all' - both sent and received (default)
     """
-    results = await db.execute(
-        select(FriendRequest).where(
-            or_(
-                FriendRequest.from_user_id == current_user['uid'],
-                FriendRequest.to_user_id == current_user['uid']
+    
+    query = select(FriendRequest).options(
+        joinedload(FriendRequest.from_user),
+        joinedload(FriendRequest.to_user)
+    )
+    
+    # Build conditions based on request_type
+    user_conditions = []
+    
+    if request_type in [FriendRequestType.RECEIVED, FriendRequestType.ALL]:
+        user_conditions.append(FriendRequest.to_user_id == current_user['uid'])
+        
+    if request_type in [FriendRequestType.SENT, FriendRequestType.ALL]:
+        user_conditions.append(FriendRequest.from_user_id == current_user['uid'])
+    
+    # Combine conditions with OR if needed
+    if len(user_conditions) > 1:
+        user_condition = or_(*user_conditions)
+    elif user_conditions:
+        user_condition = user_conditions[0]
+    else:
+        user_condition = None
+    
+    # Final query with status filter
+    if user_condition is not None:
+        query = query.where(
+            and_(
+                user_condition
             )
         )
-    )
-    requests = results.scalars().all()
+    else:
+        query = query.where()
+    
+    results = await db.execute(query)
+    requests = results.scalars().unique().all()
     return requests
 
 @router.patch("/request/{request_id}", response_model=FriendRequestResponse)
