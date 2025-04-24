@@ -104,3 +104,13 @@ class FriendRequestType(str, PyEnum):
     RECEIVED = "received"
     ALL = "all"
 
+
+class BlockListResponse(BaseModel):
+    id: str
+    blocker_id: str
+    blocked_id: str
+    reason: str
+    created_at: datetime  # or Optional[datetime] if nullable
+
+    class Config:
+        orm_mode = True
