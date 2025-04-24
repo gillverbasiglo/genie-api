@@ -12,12 +12,16 @@ class ShareBase(BaseModel):
 class ShareCreate(ShareBase):
     to_user_id: str
 
-class NotificationResponse(BaseModel):
-    device_token: str
+class ResponsePayload(BaseModel):
     success: bool
     message: str
-    apns_id: Optional[str] = None
-    apns_unique_id: Optional[str] = None
+    apnsId: Optional[str] = None
+    apnsUniqueId: Optional[str] = None
+
+class NotificationResponse(BaseModel):
+    device_token: str
+    status_code: int
+    response: ResponsePayload
 
 class ShareResponse(ShareBase):
     id: str

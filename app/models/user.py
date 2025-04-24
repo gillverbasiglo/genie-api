@@ -13,7 +13,7 @@ class User(Base):
     phone_number = Column(String, unique=True, index=True)
     email = Column(String, unique=True, index=True, nullable=True)
     display_name = Column(String, nullable=True)
-    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=datetime.now(timezone.utc))
     invited_by = Column(String, ForeignKey("users.id"), nullable=True)
     archetypes = Column(ARRAY(String), nullable=True)
     keywords = Column(ARRAY(String), nullable=True)
