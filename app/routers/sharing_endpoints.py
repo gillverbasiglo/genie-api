@@ -157,11 +157,13 @@ async def share_content(
     logger.debug("Entering in Share")
     # Check if user exists
 
-    from_user = db.execute(select(User).where(User.id == current_user['uid'])).scalar_one_or_none()
+    from_user = await db.execute(select(User).where(User.id == current_user['uid']))
+    from_user = from_user.scalar_one_or_none()
     if not from_user:
         raise HTTPException(status_code=404, detail="Sharing User not found")
 
-    to_user = db.execute(select(User).where(User.id == share_data.to_user_id)).scalar_one_or_none()
+    to_user = await db.execute(select(User).where(User.id == share_data.to_user_id))
+    to_user = to_user.scalar_one_or_none()
     
     if not from_user or not to_user:
         logger.debug("Error in Share")
@@ -178,7 +180,13 @@ async def share_content(
     db.add(share)
     await db.commit()
     await db.refresh(share)
-    logger.debug("Added Share")
+
+    notification_data = json.dumps({
+        "content_id": share_data.content_id,
+        "content_type": share_data.content_type,
+        "from_user_id": from_user.id,
+        "share_id": share.id
+    })
     
     # Create notification
     notification = Notification(
@@ -186,17 +194,12 @@ async def share_content(
         type="share",
         title=share_data.title,
         message=share_data.message,
-        data=json.dumps({
-            "content_id": share_data.content_id,
-            "content_type": share_data.content_type,
-            "from_user_id": from_user.id,
-            "share_id": share.id
-        }),
+        data=notification_data,
         is_read=False
     )
     db.add(notification)
-    db.commit()
-    db.refresh(notification)
+    await db.commit()
+    await db.refresh(notification)
     logger.debug("Added Notification")
     
     # Send real-time notification if user is connected
@@ -217,7 +220,8 @@ async def share_content(
         DeviceToken.user_id == share_data.to_user_id,
         DeviceToken.platform == "ios"
     )
-    device_tokens = db.execute(stmt).scalars().all()
+    device_tokens = await db.execute(stmt)
+    device_tokens = device_tokens.scalars().all()
     
     # Send push notifications and get responses
     notification_responses = await send_push_notifications(device_tokens, notification)

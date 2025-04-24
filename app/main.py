@@ -46,16 +46,6 @@ app.include_router(SearchEndpoints)
 app.include_router(FriendsEndpoints)
 app.include_router(UserAndContacts)
 
-
-class LoggingMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next):
-        body = await request.body()
-        print("Incoming Request Body:", body.decode())
-        response = await call_next(request)
-        return response
-
-app.add_middleware(LoggingMiddleware)
-
 # Global clients
 groq_client = AsyncOpenAI(
     base_url="https://api.groq.com/openai/v1",
