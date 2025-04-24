@@ -3,11 +3,10 @@ import json
 import logging
 import uuid
 import random
-
-from datetime import timedelta
-from typing import List
+from typing import List, Union
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi_cache.decorator import cache
+from google import genai
 from openai import AsyncOpenAI
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -29,10 +28,16 @@ logger = logging.getLogger(__name__)
 # Create router
 router = APIRouter(prefix="/recommendations", tags=["recommendations"])
 
+# Define the Provider enum
+class Provider(str, Enum):
+    GROQ = "groq"
+    OPENAI = "openai"
+    GOOGLE = "google"
+
 # Define the Recommendation model
 class RecommendationRequest(BaseModel):
     location: str
-    provider: str = "groq"
+    provider: Provider = Provider.GROQ
     model: str = "llama-3.1-8b-instant"
     archetypes: str
     keywords: str
@@ -59,6 +64,10 @@ groq_client = AsyncOpenAI(
 
 openai_client = AsyncOpenAI(
     api_key=settings.openai_api_key.get_secret_value()
+)
+
+google_client = genai.Client(
+    api_key=settings.google_api_key.get_secret_value()
 )
 
 keywords = [
@@ -135,7 +144,15 @@ async def generate_recommendations(
     db: AsyncSession = Depends(get_db)
 ):
     try:
-        client = groq_client if request.provider == "groq" else openai_client
+        # Select the appropriate client based on provider
+        if request.provider == Provider.GROQ:
+            client = groq_client
+        elif request.provider == Provider.OPENAI:
+            client = openai_client
+        elif request.provider == Provider.GOOGLE:
+            client = google_client
+        else:
+            raise HTTPException(status_code=400, detail="Invalid provider specified")
 
         if request.user_prompt:
             recommendations = await generate_recommendations_for_user_request(
@@ -198,9 +215,8 @@ async def generate_recommendations(
         logger.error(f"Error generating recommendations: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
 async def generate_recommendations_for_user_request(
-    client: AsyncOpenAI,
+    client: Union[AsyncOpenAI, genai.Client],
     location: str,
     archetypes: str,
     keywords: str,
@@ -212,7 +228,7 @@ async def generate_recommendations_for_user_request(
     Generate recommendations for a user's request with improved efficiency and reliability.
     
     Args:
-        client: The OpenAI client to use
+        client: The AI client to use (OpenAI, Groq, or Google)
         location: The location to search in
         archetypes: User's travel archetypes
         keywords: User's interests
@@ -241,6 +257,7 @@ async def generate_recommendations_for_user_request(
     6. The place must be currently open and operational
     7. The place must be within 50 miles of the {location} area
     8. the recommendedImage MUST be a valid archetype or keyword related to the category of the recommendation. If you are talking about a restaurant, the recommendedImage should be related to restaurants or eating out. If you are talking about a coffee shop, the recommendedImage should be related to coffee shops.
+    9. You MUST use a value from recommendedImage enum list.
 
     Example format for searchQuery:
     ✓ "Cafe Nola Frederick" (specific place)
@@ -249,50 +266,62 @@ async def generate_recommendations_for_user_request(
     ✗ "parks near Frederick" (too general)
     """
 
-    # Generate recommendations with a slightly higher temperature for diversity
-    response = await client.chat.completions.create(
-        model=model,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": llm_prompt}
-        ],
-        functions=[FUNCTION_SCHEMA],
-        function_call={"name": "generate_recommendation"},
-        temperature=0.6,  # Slightly higher for more diverse results
-        n=max_recommendations
-    )
-    
-    # Process and validate recommendations
-    recommendations = []
-    seen_places = set()  # Track unique places
-    
-    for choice in response.choices:
-        if not choice.message.function_call:
-            continue
-            
-        recommendation = json.loads(choice.message.function_call.arguments)
+    # Handle different client types
+    if isinstance(client, genai.Client):
+        response = await client.aio.models.generate_content(
+            model=model,
+            contents=llm_prompt,
+            config=genai.types.GenerateContentConfig(
+                response_mime_type="application/json",
+                system_instruction=SYSTEM_PROMPT
+            )
+        )
+        recommendations = json.loads(response.text)
+    else:
+        # OpenAI/Groq client handling
+        response = await client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": llm_prompt}
+            ],
+            functions=[FUNCTION_SCHEMA],
+            function_call={"name": "generate_recommendation"},
+            temperature=0.6,
+            n=max_recommendations
+        )
         
-        # Skip if we've already seen this place
-        if recommendation["searchQuery"] in seen_places:
-            continue
-            
-        # Validate the recommendation
-        if not all([
-            recommendation["category"] in recommendation_categories,
-            recommendation["searchQuery"],
-            recommendation["usedArchetypes"],
-            recommendation["usedKeywords"],
-            recommendation["recommendedImage"]
-        ]):
-            continue
-            
-        # Add to seen places and recommendations
-        seen_places.add(recommendation["searchQuery"])
-        recommendations.append(recommendation)
+        # Process and validate recommendations
+        recommendations = []
+        seen_places = set()  # Track unique places
         
-        # If we have enough unique recommendations, stop
-        if len(recommendations) >= max_recommendations:
-            break
+        for choice in response.choices:
+            if not choice.message.function_call:
+                continue
+                
+            recommendation = json.loads(choice.message.function_call.arguments)
+            
+            # Skip if we've already seen this place
+            if recommendation["searchQuery"] in seen_places:
+                continue
+                
+            # Validate the recommendation
+            if not all([
+                recommendation["category"] in recommendation_categories,
+                recommendation["searchQuery"],
+                recommendation["usedArchetypes"],
+                recommendation["usedKeywords"],
+                recommendation["recommendedImage"]
+            ]):
+                continue
+                
+            # Add to seen places and recommendations
+            seen_places.add(recommendation["searchQuery"])
+            recommendations.append(recommendation)
+            
+            # If we have enough unique recommendations, stop
+            if len(recommendations) >= max_recommendations:
+                break
     
     # If we couldn't generate enough recommendations, log it but return what we have
     if len(recommendations) < max_recommendations:
@@ -301,7 +330,7 @@ async def generate_recommendations_for_user_request(
     return recommendations
 
 async def generate_batch_recommendations(
-    client: AsyncOpenAI,
+    client: Union[AsyncOpenAI, genai.Client],
     location: str,
     keywords: str,
     archetypes: str,
@@ -324,6 +353,7 @@ async def generate_batch_recommendations(
     4. The recommendation must be for a specific venue, not a type of place
     5. The place must be within 50 miles of the {location} area
     6. the recommendedImage MUST be a valid archetype or keyword related to the category. If you are talking about a restaurant, the recommendedImage should be related to restaurants or eating out. If you are talking about a coffee shop, the recommendedImage should be related to coffee shops.
+    7. You MUST use a value from recommendedImage enum list.
 
     Example format for searchQuery:
     ✓ "Cafe Nola Frederick" (specific place)
@@ -332,26 +362,41 @@ async def generate_batch_recommendations(
     ✗ "parks near Frederick" (too general)
     """
     
-    response = await client.chat.completions.create(
-        model=model,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_prompt}
-        ],
-        functions=[FUNCTION_SCHEMA],
-        function_call={"name": "generate_recommendation"},
-        temperature=0.6,  # Slightly lower temperature for more focused results
-        n=1
-    )
+    # Handle different client types
+    if isinstance(client, genai.Client):
+        response = await client.aio.models.generate_content(
+            model=model,
+            contents=user_prompt,
+            config=genai.types.GenerateContentConfig(
+                response_mime_type="application/json",
+                system_instruction=SYSTEM_PROMPT
+            )
+        )
+        recommendations = [json.loads(response.text)]
+    else:
+        # OpenAI/Groq client handling
+        response = await client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": user_prompt}
+            ],
+            functions=[FUNCTION_SCHEMA],
+            function_call={"name": "generate_recommendation"},
+            temperature=0.6,
+            n=1
+        )
+        
+        recommendations = [
+            json.loads(choice.message.function_call.arguments)
+            for choice in response.choices
+            if choice.message.function_call
+        ]
     
-    return [
-        json.loads(choice.message.function_call.arguments)
-        for choice in response.choices
-        if choice.message.function_call
-    ]
+    return recommendations
 
 async def generate_friend_portal_recommendations(
-    client: AsyncOpenAI,
+    client: Union[AsyncOpenAI, genai.Client],
     location: str,
     archetypes: str,
     user_name: str,
@@ -403,23 +448,36 @@ async def generate_friend_portal_recommendations(
     - searchQuery must be an exact place name that exists and can be found on Google Places API and must be within 50 miles of the {location} area
     """
 
-    response = await client.chat.completions.create(
-        model=model,
-        messages=[
-            {
-                "role": "system",
-                "content": "You are a helpful travel assistant specialized in tailoring recommendations based on travel archetypes and interests. Always respond with valid, properly formatted JSON. Be extremely careful with JSON syntax."
-            },
-            {
-                "role": "user", 
-                "content": llm_prompt
-            }
-        ],
-        temperature=0.6,
-        max_tokens=1500
-    )
-    
-    return json.loads(response.choices[0].message.content)
+    # Handle different client types
+    if isinstance(client, genai.Client):
+        response = await client.aio.models.generate_content(
+            model=model,
+            contents=llm_prompt,
+            config=genai.types.GenerateContentConfig(
+                response_mime_type="application/json",
+                system_instruction=SYSTEM_PROMPT
+            )
+        )
+        return json.loads(response.text)
+    else:
+        # OpenAI/Groq client handling
+        response = await client.chat.completions.create(
+            model=model,
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are a helpful travel assistant specialized in tailoring recommendations based on travel archetypes and interests. Always respond with valid, properly formatted JSON. Be extremely careful with JSON syntax."
+                },
+                {
+                    "role": "user", 
+                    "content": llm_prompt
+                }
+            ],
+            temperature=0.6,
+            max_tokens=1500
+        )
+        
+        return json.loads(response.choices[0].message.content)
 
 class FriendPortalRecommendationRequest(BaseModel):
     location: str
