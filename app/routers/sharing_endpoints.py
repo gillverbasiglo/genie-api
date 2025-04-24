@@ -155,19 +155,20 @@ async def share_content(
     current_user: dict = Depends(get_current_user)
 ):
     logger.debug("Entering in Share")
-    # Check if user exists
-
-    from_user = await db.execute(select(User).where(User.id == current_user['uid']))
-    from_user = from_user.scalar_one_or_none()
+    
+    # Get from_user
+    result_from_user = await db.execute(select(User).where(User.id == current_user['uid']))
+    from_user = result_from_user.scalar_one_or_none()
     if not from_user:
         raise HTTPException(status_code=404, detail="Sharing User not found")
 
-    to_user = await db.execute(select(User).where(User.id == share_data.to_user_id))
-    to_user = to_user.scalar_one_or_none()
-    
+    # Get to
+    result_to_user = await db.execute(select(User).where(User.id == share_data.to_user_id))
+    to_user = result_to_user.scalar_one_or_none()
     if not from_user or not to_user:
         logger.debug("Error in Share")
         raise HTTPException(status_code=404, detail="One or both users not found")
+    
     
     # Create share record
     share = Share(
@@ -180,13 +181,7 @@ async def share_content(
     db.add(share)
     await db.commit()
     await db.refresh(share)
-
-    notification_data = json.dumps({
-        "content_id": share_data.content_id,
-        "content_type": share_data.content_type,
-        "from_user_id": from_user.id,
-        "share_id": share.id
-    })
+    logger.debug("Added Share")
     
     # Create notification
     notification = Notification(
@@ -194,7 +189,12 @@ async def share_content(
         type="share",
         title=share_data.title,
         message=share_data.message,
-        data=notification_data,
+        data=json.dumps({
+            "content_id": share_data.content_id,
+            "content_type": share_data.content_type,
+            "from_user_id": from_user.id,
+            "share_id": share.id
+        }),
         is_read=False
     )
     db.add(notification)
@@ -220,9 +220,8 @@ async def share_content(
         DeviceToken.user_id == share_data.to_user_id,
         DeviceToken.platform == "ios"
     )
-    device_tokens = await db.execute(stmt)
-    device_tokens = device_tokens.scalars().all()
-    
+    device_tokens_result = await db.execute(stmt)
+    device_tokens = device_tokens_result.scalars().all()
     # Send push notifications and get responses
     notification_responses = await send_push_notifications(device_tokens, notification)
     
@@ -244,7 +243,6 @@ async def share_content(
     )
     
     return response
-
 @router.get("/list", response_model=List[ShareCreate])
 async def get_shared_posts(
     current_user: dict = Depends(get_current_user),
