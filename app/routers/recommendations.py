@@ -8,6 +8,7 @@ from datetime import timedelta
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi_cache.decorator import cache
+from google import genai
 from openai import AsyncOpenAI
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -29,10 +30,16 @@ logger = logging.getLogger(__name__)
 # Create router
 router = APIRouter(prefix="/recommendations", tags=["recommendations"])
 
+# Define the Provider enum
+class Provider(str, Enum):
+    GROQ = "groq"
+    OPENAI = "openai"
+    GOOGLE = "google"
+
 # Define the Recommendation model
 class RecommendationRequest(BaseModel):
     location: str
-    provider: str = "groq"
+    provider: Provider = Provider.GROQ
     model: str = "llama-3.1-8b-instant"
     archetypes: str
     keywords: str
@@ -59,6 +66,10 @@ groq_client = AsyncOpenAI(
 
 openai_client = AsyncOpenAI(
     api_key=settings.openai_api_key.get_secret_value()
+)
+
+google_client = genai.Client(
+    api_key=settings.google_api_key.get_secret_value()
 )
 
 keywords = [
@@ -135,7 +146,15 @@ async def generate_recommendations(
     db: AsyncSession = Depends(get_db)
 ):
     try:
-        client = groq_client if request.provider == "groq" else openai_client
+        # Select the appropriate client based on provider
+        if request.provider == Provider.GROQ:
+            client = groq_client
+        elif request.provider == Provider.OPENAI:
+            client = openai_client
+        elif request.provider == Provider.GOOGLE:
+            client = google_client
+        else:
+            raise HTTPException(status_code=400, detail="Invalid provider specified")
 
         if request.user_prompt:
             recommendations = await generate_recommendations_for_user_request(
