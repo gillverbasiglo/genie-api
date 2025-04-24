@@ -240,3 +240,18 @@ async def share_content(
     )
     
     return response
+
+@router.get("/list", response_model=List[ShareCreate])
+async def get_shared_posts(
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    # Get all pending invitations for these phone numbers
+    stmt = select(Share).where(
+        Share.to_user_id == current_user["uid"]
+    )
+    shares = await db.execute(stmt)
+    shares = shares.scalars().all()
+    
+    return shares 
+

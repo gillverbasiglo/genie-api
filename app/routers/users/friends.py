@@ -10,7 +10,7 @@ from ...common import get_current_user
 from app.models import User, FriendRequest, Friend, UserBlock, UserReport
 from ...schemas.friends import (
     FriendRequestCreate,
-    FriendRequestResponse,
+    GetFriendsRequestResponse,
     FriendRequestUpdate,
     FriendResponse,
     FriendStatusResponse,
@@ -19,7 +19,8 @@ from ...schemas.friends import (
     UserReportCreate,
     UserReportResponse,
     FriendRequestStatus,
-    FriendRequestType
+    FriendRequestType,
+    FriendRequestResponse
 )
 
 router = APIRouter(prefix="/friends", tags=["friends"])
@@ -106,7 +107,7 @@ async def send_friend_request(
 
     return friend_request
 
-@router.get("/requests", response_model=List[FriendRequestResponse])
+@router.get("/requests", response_model=List[GetFriendsRequestResponse])
 async def get_friend_requests(
     request_type: FriendRequestType = FriendRequestType.ALL,
     db: AsyncSession = Depends(get_db),
@@ -149,11 +150,12 @@ async def get_friend_requests(
     if user_condition is not None:
         query = query.where(
             and_(
-                user_condition
+                user_condition,
+                FriendRequest.status != FriendRequestStatus.CANCELLED
             )
         )
     else:
-        query = query.where()
+        query = query.where(and_(FriendRequest.status != FriendRequestStatus.CANCELLED))
     
     results = await db.execute(query)
     requests = results.scalars().unique().all()

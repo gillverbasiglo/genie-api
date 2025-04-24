@@ -64,7 +64,6 @@ async def get_current_user_info(
 
     return user
 
-
 @router.post("/check-contacts", response_model=List[ContactCheckResponse])
 async def check_contacts(
     phone_numbers: List[str],
