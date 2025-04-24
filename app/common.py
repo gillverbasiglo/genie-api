@@ -92,7 +92,7 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
     if settings.environment != "production":
         logger.info("Development mode - skipping token verification")
         return {
-            "uid": "userID1002",
+            "uid": "userID1001",
             "email": "dev@example.com",
             "name": "Development User"
         }

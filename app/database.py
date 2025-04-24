@@ -7,7 +7,7 @@ from .config import settings
 SQLALCHEMY_DATABASE_URL = f"postgresql+asyncpg://{settings.db_username}:{settings.db_password.get_secret_value()}@{settings.host}:{settings.port}/{settings.database}"
 
 # Create an async engine
-engine = create_async_engine(SQLALCHEMY_DATABASE_URL, echo=True)
+engine = create_async_engine(SQLALCHEMY_DATABASE_URL, echo=False)
 
 # Create an async sessionmaker
 AsyncSessionLocal = sessionmaker(

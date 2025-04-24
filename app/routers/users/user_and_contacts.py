@@ -1,7 +1,7 @@
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import func, select, String, not_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from datetime import datetime, timezone
 
 from ...init_db import get_db
-from app.models import User, Invitation
+from app.models import User, Invitation, Friend
 from ...schemas.invitation import ContactCheckResponse
 from ...schemas.users import UserCreate, MeUserResponse, UpdateArchetypesAndKeywordsRequest
 from ...common import get_current_user
@@ -161,3 +161,32 @@ async def register_user(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error registering user: {str(e)}"
         )
+
+@router.get("/list", response_model=List[MeUserResponse])
+async def check_contacts(
+    phone_number: str,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    current_user_id = current_user["uid"]
+
+    # Get IDs of friends
+    friend_ids_stmt = select(Friend.friend_id).where(Friend.user_id == current_user_id)
+    reverse_friend_ids_stmt = select(Friend.user_id).where(Friend.friend_id == current_user_id)
+    
+    friend_ids_result = await db.execute(friend_ids_stmt)
+    reverse_friend_ids_result = await db.execute(reverse_friend_ids_stmt)
+    
+    friend_ids = set(friend_ids_result.scalars().all()) | set(reverse_friend_ids_result.scalars().all())
+
+    # Query users by phone and exclude current user and friends
+    stmt = select(User).where(
+        User.phone_number.cast(String).like(f"%{phone_number}%"),
+        User.id != current_user_id,
+        not_(User.id.in_(friend_ids))
+    )
+    
+    result = await db.execute(stmt)
+    users = result.scalars().all()
+    
+    return users

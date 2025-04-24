@@ -34,13 +34,9 @@ class GetFriendsRequestResponse(FriendRequestBase):
 class FriendRequestResponse(FriendRequestBase):
     id: str
     from_user_id: str
-    to_user_id: str
     status: FriendRequestStatus
     created_at: datetime
     updated_at: Optional[datetime] = None
-
-    class Config:
-        from_attributes = True
 
     class Config:
         from_attributes = True

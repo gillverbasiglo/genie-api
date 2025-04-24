@@ -187,10 +187,14 @@ async def update_friend_request(
     """
     Update a friend request status (accept/reject/cancel)
     """
-
+    print("Received update body:", update.model_dump())
+    logger.info("Received update body:", update.model_dump())
     result = await db.execute(
-        select(FriendRequest).where(FriendRequest.id == request_id)
+        select(FriendRequest).where(
+            FriendRequest.id == request_id
+            )
     )
+    
     friend_request = result.scalar_one_or_none()
 
     if not friend_request:

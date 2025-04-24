@@ -243,7 +243,6 @@ async def share_content(
     )
     
     return response
-
 @router.get("/list", response_model=List[ShareCreate])
 async def get_shared_posts(
     current_user: dict = Depends(get_current_user),
