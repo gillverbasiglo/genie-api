@@ -15,6 +15,7 @@ from ..schemas.shares import ShareResponse, ShareCreate, NotificationResponse
 from ..common import get_current_user
 from ..common import manager as WebSocketConnectManager
 from ..config import settings
+from ..services.user_service import get_user_by_id
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -121,86 +122,80 @@ async def share_content(
     db: AsyncSession = Depends(get_db), 
     current_user: dict = Depends(get_current_user)
 ):
-    logger.debug("Entering in Share")
-    
-    # Get from_user
-    result_from_user = await db.execute(select(User).where(User.id == current_user['uid']))
-    from_user = result_from_user.scalar_one_or_none()
-    if not from_user:
-        raise HTTPException(status_code=404, detail="Sharing User not found")
+    logger.info("Processing content share request.")
 
-    # Get to
-    result_to_user = await db.execute(select(User).where(User.id == share_data.to_user_id))
-    to_user = result_to_user.scalar_one_or_none()
+    from_user = await get_user_by_id(db, current_user['uid'])
+    to_user = await get_user_by_id(db, share_data.to_user_id)
+
     if not from_user or not to_user:
-        logger.debug("Error in Share")
+        logger.warning(f"User(s) not found: from_user={from_user}, to_user={to_user}")
         raise HTTPException(status_code=404, detail="One or both users not found")
-    
-    
-    # Create share record
-    share = Share(
-        from_user_id=from_user.id,
-        to_user_id=share_data.to_user_id,
-        content_id=share_data.content_id,
-        content_type=share_data.content_type,
-        message=share_data.message
-    )
-    db.add(share)
-    await db.commit()
-    await db.refresh(share)
-    logger.debug("Added Share")
-    
-    # Create notification
-    notification = Notification(
-        user_id=share_data.to_user_id,
-        type="share",
-        title=share_data.title,
-        message=share_data.message,
-        data=json.dumps({
-            "content_id": share_data.content_id,
-            "content_type": share_data.content_type,
-            "from_user_id": from_user.id,
-            "share_id": share.id
-        }),
-        is_read=False
-    )
-    db.add(notification)
-    await db.commit()
-    await db.refresh(notification)
-    logger.debug("Added Notification")
-    
-    # Send real-time notification if user is connected
-    notification_data = {
-        "type": "share",
-        "title": notification.title,
-        "message": notification.message,
-        "data": json.loads(notification.data),
-        "created_at": notification.created_at.isoformat()
-    }
-    
-    # Send real-time update via WebSocket if the user is online
-    asyncio.create_task(WebSocketConnectManager.send_notification(share_data.to_user_id, notification_data))
-    
-    # Get active device tokens for the user
+
+    try:
+        # Create share entry
+        share = Share(
+            from_user_id=from_user.id,
+            to_user_id=to_user.id,
+            content_id=share_data.content_id,
+            content_type=share_data.content_type,
+            message=share_data.message
+        )
+        db.add(share)
+
+        # Create notification for the recipient
+        notification = Notification(
+            user_id=to_user.id,
+            type="share",
+            title=share_data.title,
+            message=share_data.message,
+            data=json.dumps({
+                "content_id": share_data.content_id,
+                "content_type": share_data.content_type,
+                "from_user_id": from_user.id,
+                "share_id": share.id
+            }),
+            is_read=False
+        )
+        db.add(notification)
+
+        await db.commit()
+        await db.refresh(share)
+        await db.refresh(notification)
+
+        logger.info(f"Share created with ID: {share.id}")
+        logger.info(f"Notification created with ID: {notification.id}")
+
+    except Exception as e:
+        logger.exception("Failed to create share or notification.")
+        raise HTTPException(status_code=500, detail="Error creating share or notification")
+
+    # Fetch active iOS device tokens for the recipient
     stmt = select(DeviceToken).where(
         DeviceToken.is_active == True,
-        DeviceToken.user_id == share_data.to_user_id,
+        DeviceToken.user_id == to_user.id,
         DeviceToken.platform == "ios"
     )
     device_tokens_result = await db.execute(stmt)
     device_tokens = device_tokens_result.scalars().all()
-    # Send push notifications and get responses
-    print("notification_responses_start")
-    notification_responses = await send_push_notifications(device_tokens, notification)
-    print("notification_responses", notification_responses)
-    
-    # Convert notification responses to Pydantic models
+
+    if not device_tokens:
+        logger.info(f"No active iOS device tokens found for user {to_user.id}")
+
+    # Send push notifications
+    try:
+        notification_responses = await send_push_notifications(device_tokens, notification)
+        logger.info(f"Push notifications sent: {len(notification_responses)} responses")
+    except Exception as e:
+        logger.exception("Error while sending push notifications.")
+        notification_responses = []
+
+    # Map push notification responses to schema
     notification_response_models = [
         NotificationResponse(**response) for response in notification_responses
     ]
-    
-    # Create response with notification results
-    response = ShareResponse(
+
+    # Construct final API response
+    return ShareResponse(
         id=share.id,
         from_user_id=share.from_user_id,
         to_user_id=share.to_user_id,
@@ -210,8 +205,9 @@ async def share_content(
         created_at=share.created_at,
         notification_responses=notification_response_models
     )
-    
-    return response
+
+
+
 @router.get("/list", response_model=List[ShareCreate])
 async def get_shared_posts(
     current_user: dict = Depends(get_current_user),
@@ -224,4 +220,4 @@ async def get_shared_posts(
     shares = await db.execute(stmt)
     shares = shares.scalars().all()
     
-    return shares 
+    return shares

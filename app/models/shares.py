@@ -15,6 +15,9 @@ class Share(Base):
     message = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
-    from_user = relationship("User", foreign_keys=[from_user_id], back_populates="sent_shares")
-    to_user = relationship("User", foreign_keys=[to_user_id], back_populates="received_shares")
+    #from_user = relationship("User", foreign_keys=[from_user_id], back_populates="sent_shares")
+    #to_user = relationship("User", foreign_keys=[to_user_id], back_populates="received_shares")
+    from_user = relationship("User", foreign_keys=[from_user_id], back_populates="sent_shares", lazy="selectin")
+    to_user = relationship("User", foreign_keys=[to_user_id], back_populates="received_shares", lazy="selectin")
+
     
