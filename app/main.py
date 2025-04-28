@@ -10,7 +10,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from tavily import TavilyClient
 from typing import Optional, List, Literal
-from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 import json
 

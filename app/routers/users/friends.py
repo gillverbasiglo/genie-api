@@ -1,4 +1,5 @@
 import logging
+import json
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import joinedload
@@ -24,7 +25,6 @@ from ...schemas.friends import (
     FriendRequestType,
     FriendRequestResponse
 )
-import json
 
 router = APIRouter(prefix="/friends", tags=["friends"])
 
