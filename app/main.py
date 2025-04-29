@@ -10,18 +10,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from tavily import TavilyClient
 from typing import Optional, List, Literal
+from starlette.requests import Request
+import json
 
 from .common import app, get_current_user
 from .config import settings
 from .routers.google_places_endpoints import router as GooglePlacesEndpoints
 from .routers.trip_advisor_endpoints import router as TripAdvisorEndpoints
-from .routers.invitation_endpoints import router as InvitationsEndpoints
-from .routers.invite_code_endpoints import router as InviteCodeEndpoints
+from .routers.users.invitation_endpoints import router as InvitationsEndpoints
 from .routers.sharing_endpoints import router as SharingEndpoints
 from .routers.apple_site_association_endpoint import router as AppleSiteAssociationEndpoint
 from .routers.recommendations import router as RecommendationsEndpoints
 from .routers.device_token_endpoints import router as DeviceTokenEndpoints
 from .routers.search import router as SearchEndpoints
+from .routers.users.friends import router as FriendsEndpoints
+from .routers.users.user_and_contacts import router as UserAndContacts
 from .init_db import get_db
 from app.models import User
 
@@ -34,12 +37,13 @@ cache = TTLCache(maxsize=1, ttl=3600)
 app.include_router(TripAdvisorEndpoints)
 app.include_router(GooglePlacesEndpoints)
 app.include_router(InvitationsEndpoints)
-app.include_router(InviteCodeEndpoints)
 app.include_router(AppleSiteAssociationEndpoint)
 app.include_router(SharingEndpoints)
 app.include_router(RecommendationsEndpoints)
 app.include_router(DeviceTokenEndpoints)
 app.include_router(SearchEndpoints)
+app.include_router(FriendsEndpoints)
+app.include_router(UserAndContacts)
 
 # Global clients
 groq_client = AsyncOpenAI(
@@ -54,32 +58,6 @@ openai_client = AsyncOpenAI(
 class TextRequest(BaseModel):
     text: str
     provider: str = "groq"
-
-@app.get("/me")
-async def get_current_user_info(
-    current_user: dict = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    # Get user details from database
-    stmt = select(User).where(User.id == current_user["uid"])
-    user = await db.execute(stmt).scalar_one_or_none()
-    
-    if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found in database"
-        )
-
-    return {
-        "id": user.id,
-        "phone_number": user.phone_number,
-        "email": user.email,
-        "display_name": user.display_name,
-        "created_at": user.created_at,
-        "invited_by": user.invited_by,
-        "archetypes": user.archetypes,
-        "keywords": user.keywords
-    }
 
 @app.post("/process-text")
 async def process_text(
@@ -216,29 +194,4 @@ async def web_search(request: WebSearchRequest):
             status_code=500,
             detail=f"Error performing web search: {str(e)}"
         )
-
-class UpdateArchetypesAndKeywordsRequest(BaseModel):
-    archetypes: List[str]
-    keywords: List[str]
-
-@app.post("/update-archetypes-and-keywords", response_model=None)
-async def update_archetypes_and_keywords(request: UpdateArchetypesAndKeywordsRequest, db: AsyncSession = Depends(get_db), current_user: dict = Depends(get_current_user)):
-    stmt = select(User).where(User.id == current_user["uid"])
-    user = db.execute(stmt).scalar_one_or_none()
-    if user is None:
-        raise HTTPException(
-            status_code=404,
-            detail="User not found"
-        )
-
-    user.archetypes = request.archetypes
-    user.keywords = request.keywords
-
-    db.commit()
-    db.refresh(user)
-
-    return {
-        "archetypes": user.archetypes,
-        "keywords": user.keywords
-    }
 

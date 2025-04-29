@@ -3,18 +3,20 @@ import random
 import string
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
 from pydantic import BaseModel
-from datetime import datetime, timezone
+from datetime import datetime
 
-from ..init_db import get_db
+from ...init_db import get_db
 from app.models import User, Invitation
-from ..schemas.invitation import InvitationResponse, ContactCheckResponse
-from ..common import get_current_user
+from ...schemas.invitation import InvitationResponse
+from app.models import InvitationCode
+from app.models.invite_code_create import InviteCodeCreate
+from ...common import get_current_user
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -36,18 +38,47 @@ class InviteeInfo(BaseModel):
 class BulkInvitationCreate(BaseModel):
     invitees: List[InviteeInfo]
 
-class UserCreate(BaseModel):
-    phone_number: str
-    email: Optional[str] = None
-    display_name: Optional[str] = None
-    invite_code: Optional[str] = None  # To track who invited them
-
 class PendingInvitationResponse(BaseModel):
     phone_number: str
     email: Optional[str]
     invite_code: str
     invited_at: datetime
     status: str
+
+
+@router.post("/validate-code/", dependencies=[Depends(get_current_user)])
+async def validate_code(code: str, db: AsyncSession = Depends(get_db)):
+    db_code = db.query(InvitationCode).filter(InvitationCode.code == code).first()
+    if not db_code:
+        raise HTTPException(status_code=404, detail="Invite Code not found")
+    if db_code.used_by:
+        raise HTTPException(status_code=400, detail="Invite Code is already used")
+    if db_code.expires_at and db_code.expires_at < datetime.utcnow():
+        raise HTTPException(status_code=400, detail="Invite Code has expired")
+    if not db_code.is_active:
+        raise HTTPException(status_code=400, detail="Invite Code is not active")
+    return {"message": "Invite Code is valid"}
+
+
+@router.post("/create-invite-code/", dependencies=[Depends(get_current_user)])
+async def create_invite_code(invite_code: InviteCodeCreate, db: AsyncSession = Depends(get_db)):
+    # Check if code already exists
+    db_code = db.query(InvitationCode).filter(InvitationCode.code == invite_code.code).first()
+    if db_code:
+        raise HTTPException(status_code=400, detail="Invitation code already exists")
+
+    new_code = InvitationCode(
+        code=invite_code.code,
+        expires_at=invite_code.expires_at,
+        is_active=invite_code.is_active
+    )
+
+    db.add(new_code)
+    await db.commit()
+    await db.refresh(new_code)
+
+    return {"message": "Invitation code created successfully", "code": new_code.code}
+
 
 @router.post("/send", response_model=List[InvitationResponse])
 async def send_invitation(
@@ -95,55 +126,12 @@ async def send_invitation(
     
     if new_invitations:
         db.add_all(new_invitations)
-        db.commit()
+        await db.commit()
         for invitation in new_invitations:
-            db.refresh(invitation)
+            await db.refresh(invitation)
     
     return new_invitations
 
-@router.post("/check-contacts", response_model=List[ContactCheckResponse])
-async def check_contacts(
-    phone_numbers: List[str],
-    current_user: dict = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    # Check if user exists
-    stmt = select(User).where(User.id == current_user["uid"])
-    inviter = db.execute(stmt).scalar_one_or_none()
-    if inviter is None:
-        raise HTTPException(status_code=404, detail="User not found")
-    
-    # Query users with these phone numbers
-    stmt = select(User).where(User.phone_number.in_(phone_numbers))
-    users = db.execute(stmt).scalars().all()
-    user_map = {user.phone_number: user for user in users}
-    
-    # Query pending invitations for these phone numbers
-    stmt = select(Invitation).where(
-        Invitation.inviter_id == current_user["uid"],
-        Invitation.invitee_phone.in_(phone_numbers),
-        Invitation.status == "pending"
-    )
-    pending_invites = db.execute(stmt).scalars().all()
-    invite_map = {invite.invitee_phone: invite for invite in pending_invites}
-    
-    # Create response for each phone number
-    response = []
-    for phone in phone_numbers:
-        user = user_map.get(phone)
-        invite = invite_map.get(phone)
-        
-        response.append(ContactCheckResponse(
-            phone_number=phone,
-            is_registered=user is not None,
-            is_invited=invite is not None,
-            user_id=user.id if user else None,
-            display_name=user.display_name if user else None,
-            invite_code=invite.invite_code if invite else None,
-            invited_at=invite.created_at if invite else None
-        ))
-    
-    return response
 
 @router.get("/stats", response_model=dict)
 async def get_invitation_stats(
@@ -165,60 +153,6 @@ async def get_invitation_stats(
         "total_invites": total_invites,
         "accepted_invites": accepted_invites
     }
-
-@router.post("/register-user", response_model=dict)
-async def register_user(
-    user_data: UserCreate,
-    current_user: dict = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    try:
-        # Create new user
-        new_user = User(
-            id=current_user["uid"],
-            phone_number= user_data.phone_number,
-            email=user_data.email,
-            display_name=user_data.display_name,
-            created_at=datetime.now(timezone.utc)
-        )
-
-        # If invite code is provided, link it to the invitation
-        if user_data.invite_code:
-            invitation = db.execute(select(Invitation).where(
-                Invitation.invite_code == user_data.invite_code,
-                Invitation.status == "pending"
-            )).scalar_one_or_none()
-
-            if invitation:
-                # Update invitation status
-                invitation.status = "accepted"
-                invitation.accepted_at = datetime.now(timezone.UTC)
-                invitation.invitee_id = current_user["uid"]
-                # Set the invited_by relationship
-                new_user.invited_by = invitation.inviter_id
-
-        db.add(new_user)
-        db.commit()
-        db.refresh(new_user)
-
-        return {
-            "message": "User registered successfully",
-            "user_id": new_user.id,
-            "invited_by": new_user.invited_by if new_user.invited_by else None
-        }
-
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="User is either logged in or this phone or email already exists"
-        )
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error registering user: {str(e)}"
-        )
 
 @router.post("/pending-invitations", response_model=List[PendingInvitationResponse])
 async def get_pending_invitations(

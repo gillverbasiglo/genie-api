@@ -33,8 +33,8 @@ async def register_device_token(
             # Update existing token if it was deactivated
             if not existing_token.is_active:
                 existing_token.is_active = True
-                db.commit()
-                db.refresh(existing_token)
+                await db.commit()
+                await db.refresh(existing_token)
             return existing_token
         
         # Create new device token
@@ -45,8 +45,8 @@ async def register_device_token(
         )
         
         db.add(new_token)
-        db.commit()
-        db.refresh(new_token)
+        await db.commit()
+        await db.refresh(new_token)
         
         return new_token
         
@@ -80,7 +80,7 @@ async def unregister_device_token(
             )
         
         device_token.is_active = False
-        db.commit()
+        await db.commit()
         
         return {"message": "Device token unregistered successfully"}
         

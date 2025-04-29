@@ -5,11 +5,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from firebase_admin import initialize_app, auth
 from typing import Dict, List
-
+import asyncio
 from app.config import settings
 from .init_db import get_db
 from sqlalchemy.ext.asyncio import AsyncSession
 from .models.user import User
+from sqlalchemy.future import select
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -91,7 +92,7 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
     if settings.environment != "production":
         logger.info("Development mode - skipping token verification")
         return {
-            "uid": "IhgzLPLZhzUWgerOiVWDdqGE0cm1",
+            "uid": "userID1002",
             "email": "dev@example.com",
             "name": "Development User"
         }
@@ -116,25 +117,39 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
 @app.websocket("/ws/{user_id}")
 async def websocket_endpoint(
     websocket: WebSocket,
-    user_id: str,
+    user_id: str,  # user_id as string from the URL
     db: AsyncSession = Depends(get_db)
 ):
     try:
-        # Check if user exists
-        user = db.query(User).filter(User.id == user_id).first()
+        print(f"Attempting WS connection for: {user_id}")
+        results = await db.execute(select(User).where(User.id == user_id))
+        user = results.scalar_one_or_none()
+
         if not user:
+            print(f"User {user_id} not found")
             await websocket.close(code=1000)
             return
-        
+
+        # Connect WebSocket for the user
         await manager.connect(websocket, user_id)
-        
+        print(f"Connected to WS for user {user_id}")
+
         try:
             while True:
-                # Keep connection alive
                 await websocket.receive_text()
         except WebSocketDisconnect:
             manager.disconnect(websocket, user_id)
     except Exception as e:
-        logger.error(f"WebSocket error: {e}")
+        print(f"WebSocket error: {e}")
         for user_id in manager.active_connections:
             manager.disconnect(websocket, user_id)
+
+
+
+@app.websocket("/ws-test")
+async def websocket_test(websocket: WebSocket):
+    await websocket.accept()
+    await websocket.send_text("Hello from server!")
+    await asyncio.sleep(10)
+    await websocket.close()
+    

@@ -15,6 +15,7 @@ from ..schemas.shares import ShareResponse, ShareCreate, NotificationResponse
 from ..common import get_current_user
 from ..common import manager as WebSocketConnectManager
 from ..config import settings
+from ..services.user_service import get_user_by_id
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -88,65 +89,32 @@ async def send_single_notification(device_token: str, notification: Notification
         }
 
 async def send_push_notifications(device_tokens: List[DeviceToken], notification: Notification) -> List[Dict[str, Any]]:
-    """
-    Send push notifications to multiple devices via HTTP endpoint
-    
-    Args:
-        device_tokens: List of DeviceToken objects
-        notification: Notification object containing the notification details
-        
-    Returns:
-        List of notification responses
-    """
-    if not device_tokens:
-        logger.warning("No device tokens found for notification")
-        return []
-        
-    # Extract device tokens
-    tokens = [token.token for token in device_tokens]
-    logger.info(f"Found {len(tokens)} active device tokens for notification")
-    
-    # Create a semaphore to limit concurrent requests
-    semaphore = asyncio.Semaphore(10)  # Limit to 10 concurrent requests
-    
-    async def send_with_semaphore(token: str) -> Dict[str, Any]:
-        async with semaphore:
-            return await send_single_notification(token, notification)
-    
-    # Send notifications concurrently
-    try:
-        # Create tasks for all notifications
-        tasks = [send_with_semaphore(token) for token in tokens]
-        
-        # Wait for all notifications to complete
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        
-        # Convert results to list of notification responses
-        notification_responses = []
-        for result in results:
-            if isinstance(result, dict):
-                notification_responses.append(result)
-            else:
-                logger.error(f"Error in notification task: {str(result)}")
-                notification_responses.append({
-                    "device_token": "unknown",
-                    "success": False,
-                    "message": f"Error in notification task: {str(result)}",
-                    "apns_id": None,
-                    "apns_unique_id": None
+    push_responses = []
+
+    for token_obj in device_tokens:
+        payload = {
+            "deviceToken": token_obj.token,
+            "message": notification.message,
+            "title": notification.title,
+            "badge": 1
+        }
+
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(f"{settings.push_notification_url.get_secret_value()}", json=payload)
+                push_responses.append({
+                    "device_token": token_obj.token,
+                    "status_code": response.status_code,
+                    "response": response.json() if response.status_code == 200 else response.text
                 })
-        
-        # Log summary
-        successful = sum(1 for r in notification_responses if r["success"])
-        failed = len(notification_responses) - successful
-        
-        logger.info(f"Notification delivery summary - Total: {len(tokens)}, Successful: {successful}, Failed: {failed}")
-        
-        return notification_responses
-                
-    except Exception as e:
-        logger.error(f"Error in push notification batch: {str(e)}")
-        return []
+        except Exception as e:
+            push_responses.append({
+                "device_token": token_obj.token,
+                "status_code": 500,
+                "response": f"Error sending notification: {str(e)}"
+            })
+
+    return push_responses
 
 @router.post("/recommendation", response_model=ShareResponse)
 async def share_content(
@@ -154,81 +122,80 @@ async def share_content(
     db: AsyncSession = Depends(get_db), 
     current_user: dict = Depends(get_current_user)
 ):
-    logger.debug("Entering in Share")
-    # Check if user exists
+    logger.info("Processing content share request.")
 
-    from_user = db.execute(select(User).where(User.id == current_user['uid'])).scalar_one_or_none()
-    if not from_user:
-        raise HTTPException(status_code=404, detail="Sharing User not found")
+    from_user = await get_user_by_id(db, current_user['uid'])
+    to_user = await get_user_by_id(db, share_data.to_user_id)
 
-    to_user = db.execute(select(User).where(User.id == share_data.to_user_id)).scalar_one_or_none()
-    
     if not from_user or not to_user:
-        logger.debug("Error in Share")
+        logger.warning(f"User(s) not found: from_user={from_user}, to_user={to_user}")
         raise HTTPException(status_code=404, detail="One or both users not found")
-    
-    # Create share record
-    share = Share(
-        from_user_id=from_user.id,
-        to_user_id=share_data.to_user_id,
-        content_id=share_data.content_id,
-        content_type=share_data.content_type,
-        message=share_data.message
-    )
-    db.add(share)
-    db.commit()
-    db.refresh(share)
-    logger.debug("Added Share")
-    
-    # Create notification
-    notification = Notification(
-        user_id=share_data.to_user_id,
-        type="share",
-        title=share_data.title,
-        message=share_data.message,
-        data=json.dumps({
-            "content_id": share_data.content_id,
-            "content_type": share_data.content_type,
-            "from_user_id": from_user.id,
-            "share_id": share.id
-        }),
-        is_read=False
-    )
-    db.add(notification)
-    db.commit()
-    db.refresh(notification)
-    logger.debug("Added Notification")
-    
-    # Send real-time notification if user is connected
-    notification_data = {
-        "type": "share",
-        "title": notification.title,
-        "message": notification.message,
-        "data": json.loads(notification.data),
-        "created_at": notification.created_at.isoformat()
-    }
-    
-    # Send real-time update via WebSocket if the user is online
-    asyncio.create_task(WebSocketConnectManager.send_notification(share_data.to_user_id, notification_data))
-    
-    # Get active device tokens for the user
+
+    try:
+        # Create share entry
+        share = Share(
+            from_user_id=from_user.id,
+            to_user_id=to_user.id,
+            content_id=share_data.content_id,
+            content_type=share_data.content_type,
+            message=share_data.message
+        )
+        db.add(share)
+
+        # Create notification for the recipient
+        notification = Notification(
+            user_id=to_user.id,
+            type="share",
+            title=share_data.title,
+            message=share_data.message,
+            data=json.dumps({
+                "content_id": share_data.content_id,
+                "content_type": share_data.content_type,
+                "from_user_id": from_user.id,
+                "share_id": share.id
+            }),
+            is_read=False
+        )
+        db.add(notification)
+
+        await db.commit()
+        await db.refresh(share)
+        await db.refresh(notification)
+
+        logger.info(f"Share created with ID: {share.id}")
+        logger.info(f"Notification created with ID: {notification.id}")
+
+    except Exception as e:
+        logger.exception("Failed to create share or notification.")
+        raise HTTPException(status_code=500, detail="Error creating share or notification")
+
+    # Fetch active iOS device tokens for the recipient
     stmt = select(DeviceToken).where(
         DeviceToken.is_active == True,
-        DeviceToken.user_id == share_data.to_user_id,
+        DeviceToken.user_id == to_user.id,
         DeviceToken.platform == "ios"
     )
-    device_tokens = db.execute(stmt).scalars().all()
-    
-    # Send push notifications and get responses
-    notification_responses = await send_push_notifications(device_tokens, notification)
-    
-    # Convert notification responses to Pydantic models
+    device_tokens_result = await db.execute(stmt)
+    device_tokens = device_tokens_result.scalars().all()
+
+    if not device_tokens:
+        logger.info(f"No active iOS device tokens found for user {to_user.id}")
+
+    # Send push notifications
+    try:
+        notification_responses = await send_push_notifications(device_tokens, notification)
+        logger.info(f"Push notifications sent: {len(notification_responses)} responses")
+    except Exception as e:
+        logger.exception("Error while sending push notifications.")
+        notification_responses = []
+
+    # Map push notification responses to schema
     notification_response_models = [
         NotificationResponse(**response) for response in notification_responses
     ]
-    
-    # Create response with notification results
-    response = ShareResponse(
+
+    # Construct final API response
+    return ShareResponse(
         id=share.id,
         from_user_id=share.from_user_id,
         to_user_id=share.to_user_id,
@@ -238,5 +205,19 @@ async def share_content(
         created_at=share.created_at,
         notification_responses=notification_response_models
     )
+
+
+
+@router.get("/list", response_model=List[ShareCreate])
+async def get_shared_posts(
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    # Get all pending invitations for these phone numbers
+    stmt = select(Share).where(
+        Share.to_user_id == current_user["uid"]
+    )
+    shares = await db.execute(stmt)
+    shares = shares.scalars().all()
     
-    return response
+    return shares
