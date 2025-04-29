@@ -1,7 +1,7 @@
 """Convert array columns to JSONB with similarity_score
 
 Revision ID: 9602979b5113
-Revises: e98db86d0001
+Revises: 5d142413ab4b
 Create Date: 2025-04-29 11:41:18.983526
 
 """
@@ -13,7 +13,7 @@ from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 
 # revision identifiers, used by Alembic.
 revision = '9602979b5113'
-down_revision = 'e98db86d0001'
+down_revision = '5d142413ab4b'
 branch_labels = None
 depends_on = None
 
