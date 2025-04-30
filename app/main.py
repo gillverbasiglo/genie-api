@@ -15,13 +15,13 @@ import json
 
 from .common import app, get_current_user
 from .config import settings
-from .routers.google_places_endpoints import router as GooglePlacesEndpoints
-from .routers.trip_advisor_endpoints import router as TripAdvisorEndpoints
+from .routers.google.places.endpoints import router as GooglePlacesEndpoints
+from .routers.trip_advisor.endpoints import router as TripAdvisorEndpoints
 from .routers.users.invitation_endpoints import router as InvitationsEndpoints
-from .routers.sharing_endpoints import router as SharingEndpoints
-from .routers.apple_site_association_endpoint import router as AppleSiteAssociationEndpoint
-from .routers.recommendations import router as RecommendationsEndpoints
-from .routers.device_token_endpoints import router as DeviceTokenEndpoints
+from .routers.sharing.endpoints import router as SharingEndpoints
+from .routers.apple.endpoints import router as AppleSiteAssociationEndpoint
+from .routers.recommendations.endpoints import router as RecommendationsEndpoints
+from .routers.device_tokens.endpoints import router as DeviceTokenEndpoints
 from .routers.search import router as SearchEndpoints
 from .routers.users.friends_endpoints import router as FriendsEndpoints
 from .routers.users.user_and_contacts import router as UserAndContacts

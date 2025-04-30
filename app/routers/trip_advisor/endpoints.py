@@ -8,7 +8,7 @@ from typing import Optional, List
 from enum import Enum
 
 from app.common import get_current_user
-from ..config import settings
+from ...config import settings
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)

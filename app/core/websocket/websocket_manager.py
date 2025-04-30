@@ -21,12 +21,11 @@ class ConnectionManager:
 
     async def send_notification(self, user_id: str, message: dict):
         """Send a notification to the user over WebSocket."""
-        if user_id in self.active_connections:
-            for connection in self.active_connections[user_id]:
-                await connection.send_json(message)
+        websocket = self.active_connections.get(user_id)
+        if websocket:
+            await websocket.send_json(message)
         else:
-            # If the user is not connected, you might want to store the notification for later retrieval
-            pass
+            logger.warning(f"No active WebSocket connection for user {user_id}")
     
     async def send_personal_message(self, user_id: str, message: dict):
         websocket = self.active_connections.get(user_id)
@@ -34,6 +33,6 @@ class ConnectionManager:
             logger.info(f"Sending message to {user_id}: {message}")
             await websocket.send_json(message)
         else:
-            logger.warning(f"User {user_id} not connected")
+            logger.warning(f"No active WebSocket connection for user {user_id}")
 
 manager = ConnectionManager()

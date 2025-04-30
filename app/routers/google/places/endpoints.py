@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
 
 from app.common import get_current_user
-from ..config import settings
+from app.config import settings
 
 
 # Configure logging

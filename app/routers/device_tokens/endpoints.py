@@ -4,10 +4,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from datetime import datetime
 
-from ..init_db import get_db
+from ...init_db import get_db
 from app.models import DeviceToken
-from ..schemas.device_token import DeviceTokenCreate, DeviceTokenResponse
-from ..common import get_current_user
+from ...schemas.device_token import DeviceTokenCreate, DeviceTokenResponse
+from ...common import get_current_user
 
 logger = logging.getLogger(__name__)
 
