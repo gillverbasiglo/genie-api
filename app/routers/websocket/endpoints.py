@@ -43,14 +43,14 @@ async def websocket_endpoint(
                 message_data = await websocket.receive_json()
                 message_type = message_data.get("type")
 
-                if message_type == "Chat_message":
+                if message_type == "chatMessage":
                     receiver_id = message_data.get("receiver_id")
                     content = message_data.get("content")
                     timestamp = datetime.utcnow()
 
                     # Save message to the database
                     new_message = Message(
-                        id=str(uuid.uuid4()),
+                        id=uuid.uuid4(),
                         sender_id=user_id,
                         receiver_id=receiver_id,
                         content=content,
@@ -58,6 +58,7 @@ async def websocket_endpoint(
                         created_at=timestamp,
                         updated_at=timestamp
                     )
+                    logger.info(f"saving message to db: {new_message.status}")
                     #db.add(new_message)
                     #await db.commit()
 
@@ -68,7 +69,7 @@ async def websocket_endpoint(
                     logger.info(f"Sending message to {receiver_id}: {content}")
                     await manager.send_personal_message(
                         receiver_id,
-                        {"type": "Chat_message", "sender_id": user_id, "content": content, "status": MessageStatus.SENT, "timestamp": timestamp_str}
+                        {"type": "chatMessage", "sender_id": user_id, "content": content, "status": MessageStatus.SENT, "timestamp": timestamp_str}
                     )
 
                 else:
