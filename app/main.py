@@ -23,7 +23,7 @@ from .routers.apple_site_association_endpoint import router as AppleSiteAssociat
 from .routers.recommendations import router as RecommendationsEndpoints
 from .routers.device_token_endpoints import router as DeviceTokenEndpoints
 from .routers.search import router as SearchEndpoints
-from .routers.users.friends import router as FriendsEndpoints
+from .routers.users.friends_endpoints import router as FriendsEndpoints
 from .routers.users.user_and_contacts import router as UserAndContacts
 from app.routers.websocket.endpoints import router as WebSocketEndpoints
 from .init_db import get_db
