@@ -1,0 +1,39 @@
+from fastapi import WebSocket
+from typing import List, Dict
+import logging
+
+
+
+logger = logging.getLogger(__name__)
+
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: Dict[str, List[WebSocket]] = {}
+
+    async def connect(self, websocket: WebSocket, user_id: str):
+        await websocket.accept()
+        self.active_connections[user_id] = websocket
+
+    def disconnect(self, websocket: WebSocket, user_id: str):
+        if user_id in self.active_connections:
+            del self.active_connections[user_id]
+            websocket.close()
+
+    async def send_notification(self, user_id: str, message: dict):
+        """Send a notification to the user over WebSocket."""
+        if user_id in self.active_connections:
+            for connection in self.active_connections[user_id]:
+                await connection.send_json(message)
+        else:
+            # If the user is not connected, you might want to store the notification for later retrieval
+            pass
+    
+    async def send_personal_message(self, user_id: str, message: dict):
+        websocket = self.active_connections.get(user_id)
+        if websocket:
+            logger.info(f"Sending message to {user_id}: {message}")
+            await websocket.send_json(message)
+        else:
+            logger.warning(f"User {user_id} not connected")
+
+manager = ConnectionManager()

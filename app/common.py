@@ -11,6 +11,7 @@ from .init_db import get_db
 from sqlalchemy.ext.asyncio import AsyncSession
 from .models.user import User
 from sqlalchemy.future import select
+from app.core.websocket.websocket_manager import manager
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -61,38 +62,13 @@ firebase_app = None
 
 logger = logging.getLogger(__name__)
 
-# WebSocket Connection Manager
-class ConnectionManager:
-    def __init__(self):
-        self.active_connections: Dict[int, List[WebSocket]] = {}
-    
-    async def connect(self, websocket: WebSocket, user_id: int):
-        await websocket.accept()
-        if user_id not in self.active_connections:
-            self.active_connections[user_id] = []
-        self.active_connections[user_id].append(websocket)
-    
-    def disconnect(self, websocket: WebSocket, user_id: int):
-        if user_id in self.active_connections:
-            self.active_connections[user_id].remove(websocket)
-            if not self.active_connections[user_id]:
-                del self.active_connections[user_id]
-    
-    async def send_notification(self, user_id: int, message: dict):
-        if user_id in self.active_connections:
-            for connection in self.active_connections[user_id]:
-                await connection.send_json(message)
-
-manager = ConnectionManager()
-
-
 # Dependency to get current user from token
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
 
     if settings.environment != "production":
         logger.info("Development mode - skipping token verification")
         return {
-            "uid": "userID1002",
+            "uid": "userID1004",
             "email": "dev@example.com",
             "name": "Development User"
         }
@@ -112,44 +88,4 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=f"Invalid authentication token: {str(e)}"
         )
-
-# WebSocket endpoint for real-time notifications
-@app.websocket("/ws/{user_id}")
-async def websocket_endpoint(
-    websocket: WebSocket,
-    user_id: str,  # user_id as string from the URL
-    db: AsyncSession = Depends(get_db)
-):
-    try:
-        print(f"Attempting WS connection for: {user_id}")
-        results = await db.execute(select(User).where(User.id == user_id))
-        user = results.scalar_one_or_none()
-
-        if not user:
-            print(f"User {user_id} not found")
-            await websocket.close(code=1000)
-            return
-
-        # Connect WebSocket for the user
-        await manager.connect(websocket, user_id)
-        print(f"Connected to WS for user {user_id}")
-
-        try:
-            while True:
-                await websocket.receive_text()
-        except WebSocketDisconnect:
-            manager.disconnect(websocket, user_id)
-    except Exception as e:
-        print(f"WebSocket error: {e}")
-        for user_id in manager.active_connections:
-            manager.disconnect(websocket, user_id)
-
-
-
-@app.websocket("/ws-test")
-async def websocket_test(websocket: WebSocket):
-    await websocket.accept()
-    await websocket.send_text("Hello from server!")
-    await asyncio.sleep(10)
-    await websocket.close()
     
