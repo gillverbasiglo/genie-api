@@ -14,10 +14,10 @@ class ConnectionManager:
         await websocket.accept()
         self.active_connections[user_id] = websocket
 
-    def disconnect(self, websocket: WebSocket, user_id: str):
+    async def disconnect(self, websocket: WebSocket, user_id: str):
         if user_id in self.active_connections:
             del self.active_connections[user_id]
-            websocket.close()
+            await websocket.close()
 
     async def send_notification(self, user_id: str, message: dict):
         """Send a notification to the user over WebSocket."""
