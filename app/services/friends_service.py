@@ -449,3 +449,23 @@ async def get_blocked_users(
     return result.scalars().all()
 
 
+async def are_friends(db: AsyncSession, user1_id: str, user2_id: str) -> bool:
+    """
+    Check if user1 and user2 are friends. Since friendships are stored bidirectionally,
+    check both directions.
+    """
+    stmt = select(Friend).where(
+        (Friend.user_id == user1_id) & (Friend.friend_id == user2_id)
+    )
+    
+    #bidirectional verification
+    #stmt = select(Friend).where(
+    #((Friend.user_id == user1_id) & (Friend.friend_id == user2_id)) |
+    #((Friend.user_id == user2_id) & (Friend.friend_id == user1_id)))
+
+    result = await db.execute(stmt)
+    friendship = result.scalar_one_or_none()
+
+    return friendship is not None
+
+

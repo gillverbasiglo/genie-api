@@ -26,6 +26,7 @@ from .routers.search import router as SearchEndpoints
 from .routers.users.friends.endpoints import router as FriendsEndpoints
 from .routers.users.user_and_contacts import router as UserAndContacts
 from app.routers.websocket.endpoints import router as WebSocketEndpoints
+from app.routers.chat.endpoints import router as ChatEndPoints
 from .init_db import get_db
 from app.models import User
 
@@ -46,6 +47,7 @@ app.include_router(SearchEndpoints)
 app.include_router(FriendsEndpoints)
 app.include_router(UserAndContacts)
 app.include_router(WebSocketEndpoints)
+app.include_router(ChatEndPoints)
 
 # Global clients
 groq_client = AsyncOpenAI(

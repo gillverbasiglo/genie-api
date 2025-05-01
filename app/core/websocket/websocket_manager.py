@@ -34,5 +34,8 @@ class ConnectionManager:
             await websocket.send_json(message)
         else:
             logger.warning(f"No active WebSocket connection for user {user_id}")
+            
+    def get_active_connections(self):
+        return self.active_connections
 
 manager = ConnectionManager()

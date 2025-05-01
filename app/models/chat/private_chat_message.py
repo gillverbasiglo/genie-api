@@ -1,10 +1,11 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, Enum, DateTime, Text
-from sqlalchemy.orm import relationship
-import uuid
-from datetime import datetime
 import enum
-
+import uuid
+from sqlalchemy import Column, Integer, String, ForeignKey, Enum  as SQLAlchemyEnum, DateTime, Text
+from sqlalchemy.orm import relationship
+from datetime import datetime
+from sqlalchemy.dialects.postgresql import ENUM
 from app.database import Base
+from enum import Enum
 
 class MessageStatus(str, enum.Enum):
     SENT = "sent"
@@ -23,7 +24,7 @@ class Message(Base):
     
     # Message content and status
     content = Column(Text, nullable=False)  # The actual message content (text)
-    status = Column(Enum(MessageStatus), default=MessageStatus.SENT)  # Enum field for message status
+    status = Column(ENUM(MessageStatus), default=MessageStatus.SENT)  # Enum field for message status
     
     # Timestamps for created and updated times
     created_at = Column(DateTime, default=datetime.utcnow)  # The time when the message was created
