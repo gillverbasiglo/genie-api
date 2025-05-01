@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/chat", tags=["Chat"])
 
-@router.get("/private", response_model=PaginatedMessagesResponse)
+@router.get("/private/history", response_model=PaginatedMessagesResponse)
 async def get_private_chat_messages(
     sender_id: str,
     receiver_id: str,
@@ -19,3 +19,12 @@ async def get_private_chat_messages(
 ):
     result = await get_paginated_private_messages(db, sender_id, receiver_id, skip, limit)
     return result
+
+@router.get("/unread-count")
+async def unread_message_count(
+    user_id: str,
+    friend_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    count = await get_unread_message_count(db, user_id, friend_id)
+    return {"unread_count": count}

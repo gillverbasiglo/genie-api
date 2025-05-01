@@ -13,6 +13,7 @@ from app.models import User, Invitation, Friend
 from ...schemas.invitation import ContactCheckResponse
 from ...schemas.users import UserCreate, MeUserResponse, UpdateArchetypesAndKeywordsRequest
 from ...common import get_current_user
+from app.core.websocket.websocket_manager import manager
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -190,3 +191,8 @@ async def check_contacts(
     users = result.scalars().all()
     
     return users
+
+
+@router.get("/{user_id}/online-status")
+async def check_user_online_status(user_id: str):
+    return {"user_id": user_id, "online": manager.is_user_online(user_id)}
