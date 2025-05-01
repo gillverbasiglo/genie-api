@@ -23,4 +23,4 @@ class MessageOut(MessageBase):
     id: str  # UUID for the message ID
 
     class Config:
-        orm_mode = True  # This allows Pydantic to read data from SQLAlchemy models
+        from_attributes = True  # This allows Pydantic to read data from SQLAlchemy models
