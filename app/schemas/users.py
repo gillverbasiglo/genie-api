@@ -31,9 +31,9 @@ class MeUserResponse(UserCreate):
     keywords: Optional[List[Keyword]] = None
 
 class UserFriendResponse(UserCreate):
-    archetypes: Optional[List[str]]
-    keywords: Optional[List[str]]
+    archetypes: Optional[List[Archetype]]
+    keywords: Optional[List[Keyword]]
 
 class UpdateArchetypesAndKeywordsRequest(BaseModel):
-    archetypes: List[str]
-    keywords: List[str]
+    archetypes: List[Archetype]
+    keywords: List[Keyword]
