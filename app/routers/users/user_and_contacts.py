@@ -79,7 +79,8 @@ async def check_contacts(
     
     # Query users with these phone numbers
     stmt = select(User).where(User.phone_number.in_(phone_numbers))
-    users = await db.execute(stmt).scalars().all()
+    query_result = await db.execute(stmt)
+    users = query_result.scalars().all()
     user_map = {user.phone_number: user for user in users}
     
     # Query pending invitations for these phone numbers
@@ -88,7 +89,8 @@ async def check_contacts(
         Invitation.invitee_phone.in_(phone_numbers),
         Invitation.status == "pending"
     )
-    pending_invites = await db.execute(stmt).scalars().all()
+    query_result = await db.execute(stmt)
+    pending_invites = query_result.scalars().all()
     invite_map = {invite.invitee_phone: invite for invite in pending_invites}
     
     # Create response for each phone number
@@ -127,10 +129,11 @@ async def register_user(
 
         # If invite code is provided, link it to the invitation
         if user_data.invite_code:
-            invitation = db.execute(select(Invitation).where(
+            query_result = await db.execute(select(Invitation).where(
                 Invitation.invite_code == user_data.invite_code,
                 Invitation.status == "pending"
-            )).scalar_one_or_none()
+            ))
+            invitation = query_result.scalar_one_or_none()
 
             if invitation:
                 # Update invitation status
