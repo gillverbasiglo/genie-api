@@ -35,8 +35,9 @@ async def update_archetypes_and_keywords(
             detail="User not found"
         )
 
-    user.archetypes = request.archetypes
-    user.keywords = request.keywords
+    # Convert Pydantic models to dictionaries using model_dump instead of dict
+    user.archetypes = [archetype.model_dump() for archetype in request.archetypes]
+    user.keywords = [keyword.model_dump() for keyword in request.keywords]
 
     await db.commit()
     await db.refresh(user)
