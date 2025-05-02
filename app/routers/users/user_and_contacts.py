@@ -72,7 +72,8 @@ async def check_contacts(
 ):
     # Check if user exists
     stmt = select(User).where(User.id == current_user["uid"])
-    inviter = db.execute(stmt).scalar_one_or_none()
+    query_result = await db.execute(stmt)
+    inviter = query_result.scalar_one_or_none()
     if inviter is None:
         raise HTTPException(status_code=404, detail="User not found")
     
