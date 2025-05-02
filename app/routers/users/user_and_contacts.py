@@ -79,7 +79,7 @@ async def check_contacts(
     
     # Query users with these phone numbers
     stmt = select(User).where(User.phone_number.in_(phone_numbers))
-    users = db.execute(stmt).scalars().all()
+    users = await db.execute(stmt).scalars().all()
     user_map = {user.phone_number: user for user in users}
     
     # Query pending invitations for these phone numbers
@@ -88,7 +88,7 @@ async def check_contacts(
         Invitation.invitee_phone.in_(phone_numbers),
         Invitation.status == "pending"
     )
-    pending_invites = db.execute(stmt).scalars().all()
+    pending_invites = await db.execute(stmt).scalars().all()
     invite_map = {invite.invitee_phone: invite for invite in pending_invites}
     
     # Create response for each phone number
