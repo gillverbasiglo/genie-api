@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from enum import Enum
 from datetime import datetime
 
@@ -15,12 +15,20 @@ class UserStatus(str, Enum):
     SUSPENDED = "suspended"
     BANNED = "banned"
 
+class Archetype(BaseModel):
+    name: str
+    similarity_score: float
+
+class Keyword(BaseModel):
+    name: str
+    similarity_score: float
+
 class MeUserResponse(UserCreate):
     id: str
     created_at: datetime
-    invited_by: Optional[str]
-    archetypes: Optional[List[str]]
-    keywords: Optional[List[str]]
+    invited_by: Optional[str] = None
+    archetypes: Optional[List[Archetype]] = None
+    keywords: Optional[List[Keyword]] = None
 
 class UserFriendResponse(UserCreate):
     archetypes: Optional[List[str]]
