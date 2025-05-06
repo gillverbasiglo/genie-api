@@ -19,7 +19,9 @@ class MessageHandler:
         self.manager = manager
         self.handlers: Dict[str, Callable] = {
             WebSocketMessageType.PRIVATE_CHAT_MESSAGE: self.handle_private_chat_message,
-            WebSocketMessageType.MESSAGE_UPDATE: self.handle_message_status_update
+            WebSocketMessageType.MESSAGE_UPDATE: self.handle_message_status_update,
+            WebSocketMessageType.TYPING_STATUS: self.handle_typing_status,
+            WebSocketMessageType.USER_STATUS: self.handle_user_status
         }
 
     async def handle_message(self, message_data: dict, user_id: str):
@@ -58,11 +60,6 @@ class MessageHandler:
                         created_at=timestamp,
                         updated_at=timestamp
                     )
-        logger.info(f"Final status type before DB commit: {type(new_message.status)}, value: {new_message.status}")
-        logger.info(f"new_message status {new_message.status}")
-
-        logger.info(f"saving message to db: {new_message.status}")
-
                     
         self.db.add(new_message)
         await self.db.commit()
@@ -114,3 +111,43 @@ class MessageHandler:
             )
         else:
             logger.warning(f"Message not found for ID {message_id}")
+            
+    async def handle_typing_status(self, messsage_data: dict, user_id: str):
+        if user_id:
+            await self.manager.send_typing_status(
+                messsage_data.get("receiver_id"),
+                {
+                    "type": WebSocketMessageType.TYPING_STATUS,
+                    "user_id": messsage_data.get("user_id"),
+                    "receiver_id": messsage_data.get("receiver_id"),
+                    "is_typing": messsage_data.get("is_typing")
+                }
+            )
+        else:
+            logger.warning(f"Typing status not sent")
+            
+    async def handle_user_status(self, messsage_data: dict, user_id: str):
+        logger.info(f"user_id in handle_user_status is: {user_id}")
+        if user_id:
+            await self.manager.send_user_status(
+                messsage_data.get("receiver_id"),
+                {
+                    "type": WebSocketMessageType.USER_STATUS,
+                    "user_id": messsage_data.get("user_id"),
+                    "receiver_id": messsage_data.get("receiver_id"),
+                    "timestamp": messsage_data.get("timestamp"),
+                    "status": messsage_data.get("status")
+                }
+            )
+            await self.manager.send_user_status(
+                messsage_data.get("user_id"),
+                {
+                    "type": WebSocketMessageType.USER_STATUS,
+                    "user_id": messsage_data.get("receiver_id"),
+                    "receiver_id": messsage_data.get("user_id"),
+                    "timestamp": messsage_data.get("timestamp"),
+                    "status": messsage_data.get("status")
+                }
+            )
+        else:
+            logger.warning(f"User status not sent")
