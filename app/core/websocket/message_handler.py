@@ -19,7 +19,8 @@ class MessageHandler:
         self.manager = manager
         self.handlers: Dict[str, Callable] = {
             WebSocketMessageType.PRIVATE_CHAT_MESSAGE: self.handle_private_chat_message,
-            WebSocketMessageType.MESSAGE_UPDATE: self.handle_message_status_update
+            WebSocketMessageType.MESSAGE_UPDATE: self.handle_message_status_update,
+            WebSocketMessageType.TYPING_STATUS: self.handle_typing_status
         }
 
     async def handle_message(self, message_data: dict, user_id: str):
@@ -37,16 +38,16 @@ class MessageHandler:
         timestamp = datetime.now()
         
         # ✅ Check friendship
-        if not await are_friends(self.db, user_id, receiver_id):
-            logger.warning(f"User {user_id} is not friends with {receiver_id}. Message blocked.")
-            await self.manager.send_personal_message(
-                user_id,
-                {
-                    "type": "error",
-                    "message": f"You are not friends with {receiver_id}. Cannot send message."
-                }
-            )
-            return
+        # if not await are_friends(self.db, user_id, receiver_id):
+        #     logger.warning(f"User {user_id} is not friends with {receiver_id}. Message blocked.")
+        #     await self.manager.send_personal_message(
+        #         user_id,
+        #         {
+        #             "type": "error",
+        #             "message": f"You are not friends with {receiver_id}. Cannot send message."
+        #         }
+        #     )
+        #     return
 
         # Save message to the database
         new_message = Message(
@@ -114,3 +115,15 @@ class MessageHandler:
             )
         else:
             logger.warning(f"Message not found for ID {message_id}")
+
+    async def handle_typing_status(self, messsage_data: str, user_id: bool):
+        if user_id:
+            await self.manager.send_typing_status(
+                    messsage_data.get("receiver_id"),
+                    {"type": WebSocketMessageType.TYPING_STATUS,
+                     "user_id": messsage_data.get("user_id"),
+                     "receiver_id": messsage_data.get("receiver_id"),
+                    "is_typing": messsage_data.get("is_typing")}
+                )
+        else:
+            logger.warning(f"Typing status not sent")

@@ -46,6 +46,14 @@ class ConnectionManager:
             await websocket.send_json(message)
         else:
             logger.warning(f"No active WebSocket connection for user {user_id}")
+
+    async def send_typing_status(self, receiver_id: str, message: dict):
+        websocket = self.active_connections.get(receiver_id)
+        if websocket:
+            logger.info(f"Sending typing status to {receiver_id}")
+            await websocket.send_json(message)
+        else:
+            logger.warning(f"No active WebSocket connection for user {receiver_id}")
             
     
 
