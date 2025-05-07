@@ -11,7 +11,7 @@ PEM=$(aws ssm get-parameter --name /github/application_private_key \
        --with-decryption --query 'Parameter.Value' --output text)
 
 # create a 10-min JWT for the App
-JWT=$(python - <<'PY'
+JWT=$(PEM="$PEM" CLIENT_ID="$CLIENT_ID" python3 - <<'PY'
 import jwt, os, time, sys, textwrap, json
 pem, client_id = os.environ['PEM'], os.environ['CLIENT_ID']
 print(jwt.encode(
@@ -29,5 +29,5 @@ TOKEN=$(curl -s -X POST \
 
 # clone or pull
 GIT_ASKPASS=/bin/echo \
-git clone --depth 1 "https://x-access-token:${TOKEN}@github.com/ORG/REPO.git" /home/ubuntu/genie-backend || \
+git clone --depth 1 "https://x-access-token:${TOKEN}@github.com/GenieTheAI/genie-api.git" /home/ubuntu/genie-backend || \
 git -C /home/ubuntu/genie-backend fetch --depth 1 && git -C /home/ubuntu/genie-backend reset --hard origin/main
