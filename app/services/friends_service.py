@@ -1,41 +1,19 @@
 import logging
 import json
-from typing import List
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import joinedload
+from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_, delete
-from app.common import manager
-from ...init_db import get_db
-from ...common import get_current_user
+from sqlalchemy.orm import joinedload
 from app.models import User, FriendRequest, Friend, UserBlock, UserReport
-from ...schemas.websocket import FriendRequestAcceptedMessage, WebSocketMessageType
-from ...schemas.friends import (
-    BlockListResponse,
-    FriendRequestCreate,
-    GetFriendsRequestResponse,
-    FriendRequestUpdate,
-    FriendResponse,
-    FriendStatusResponse,
-    UserBlockCreate,
-    UserBlockResponse,
-    UserReportCreate,
-    UserReportResponse,
-    FriendRequestStatus,
-    FriendRequestType,
-    FriendRequestResponse
-)
+from app.schemas.friends import FriendRequestCreate, FriendRequestType, FriendRequestUpdate, FriendRequestStatus
+from app.schemas.friends import FriendStatusResponse, UserBlockCreate, UserReportCreate
+from app.schemas.websocket import WebSocketMessageType
+from app.core.websocket.websocket_manager import manager
 
-router = APIRouter(prefix="/friends", tags=["friends"])
-
-# Configure logging
 logger = logging.getLogger(__name__)
 
-@router.post("/request", response_model=FriendRequestResponse)
 async def send_friend_request(
-    request: FriendRequestCreate,
-    db: AsyncSession = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    request: FriendRequestCreate, db: AsyncSession, current_user: dict
 ):
     """
     Send a friend request to another user
@@ -123,23 +101,9 @@ async def send_friend_request(
 
     return friend_request
 
-@router.get("/requests", response_model=List[GetFriendsRequestResponse])
 async def get_friend_requests(
-    request_type: FriendRequestType = FriendRequestType.ALL,
-    db: AsyncSession = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    request_type: FriendRequestType, db: AsyncSession, current_user: dict
 ):
-    """
-    Get friend requests with filtering options
-    
-    Parameters:
-    - status: Filter by request status (default: PENDING)
-    - request_type: Filter by request type: 
-        'sent' - requests you sent
-        'received' - requests you received
-        'all' - both sent and received (default)
-    """
-    
     query = select(FriendRequest).options(
         joinedload(FriendRequest.from_user),
         joinedload(FriendRequest.to_user)
@@ -177,18 +141,9 @@ async def get_friend_requests(
     requests = results.scalars().unique().all()
     return requests
 
-@router.patch("/request/{request_id}", response_model=FriendRequestResponse)
-async def update_friend_request(
-    request_id: str,
-    update: FriendRequestUpdate,
-    db: AsyncSession = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+async def update_friend_request_status(
+    request_id: str, update: FriendRequestUpdate, db: AsyncSession, current_user: dict
 ):
-    """
-    Update a friend request status (accept/reject/cancel)
-    """
-    print("Received update body:", update.model_dump())
-    logger.info("Received update body:", update.model_dump())
     result = await db.execute(
         select(FriendRequest).where(
             FriendRequest.id == request_id
@@ -231,15 +186,33 @@ async def update_friend_request(
         await db.refresh(friend_request)
 
     # ✅ Send WebSocket notification on ACCEPTED or REJECTED
-    if update.status in [FriendRequestStatus.ACCEPTED, FriendRequestStatus.REJECTED]:
-        print("sending ...")
+    if update.status in [FriendRequestStatus.ACCEPTED, FriendRequestStatus.REJECTED, FriendRequestStatus.CANCELLED]:
         try:
-            notification = {
-                "type": WebSocketMessageType.FRIEND_REQUEST_ACCEPTED if update.status == FriendRequestStatus.ACCEPTED else WebSocketMessageType.FRIEND_REQUEST_REJECTED,
-                "message": f"{current_user['name']} accepted your friend request." if update.status == FriendRequestStatus.ACCEPTED else f"{current_user['name']} rejected your friend request.",
-                "from_user_id": current_user['uid'],
-                "to_user_id": friend_request.from_user_id
-            }
+            if update.status == FriendRequestStatus.ACCEPTED:
+                notification = {
+                    "type": WebSocketMessageType.FRIEND_REQUEST_ACCEPTED,
+                    "message": f"{current_user['name']} accepted your friend request.",
+                    "from_user_id": current_user['uid'],
+                    "to_user_id": friend_request.from_user_id
+                }
+            elif update.status == FriendRequestStatus.REJECTED:
+                notification = {
+                    "type": WebSocketMessageType.FRIEND_REQUEST_REJECTED,
+                    "message": f"{current_user['name']} rejected your friend request.",
+                    "from_user_id": current_user['uid'],
+                    "to_user_id": friend_request.from_user_id
+                }
+            elif update.status == FriendRequestStatus.CANCELLED:
+                notification = {
+                    "type": WebSocketMessageType.FRIEND_REQUEST_CANCELLED,
+                    "message": f"{current_user['name']} cancelled the friend request.",
+                    "from_user_id": current_user['uid'],
+                    "to_user_id": friend_request.from_user_id
+                }
+            else:
+                return  # Ignore any other status
+            
+            # Send the notification to the 'from_user_id' of the friend request
             await manager.send_notification(friend_request.from_user_id, json.dumps(notification))
         except Exception as e:
             logger.warning(f"Failed to send WebSocket notification: {e}")
@@ -254,12 +227,10 @@ async def update_friend_request(
     }
 
     return response_data
-    
-@router.get("/status/{user_id}", response_model=FriendStatusResponse)
+
+
 async def get_friend_status(
-    user_id: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    user_id: str, db: AsyncSession, current_user: dict
 ):
     """
     Get the friendship status between current user and another user
@@ -319,15 +290,10 @@ async def get_friend_status(
         friend_request_id=friend_request.id if friend_request else None
     )
 
-@router.post("/block", response_model=UserBlockResponse)
+
 async def block_user(
-    block: UserBlockCreate,
-    db: AsyncSession = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    block: UserBlockCreate, db: AsyncSession, current_user: dict
 ):
-    """
-    Block a user
-    """
     if current_user['uid'] == block.blocked_id:
         raise HTTPException(status_code=400, detail="You can't block yourself")
 
@@ -390,15 +356,10 @@ async def block_user(
 
     return user_block
 
-@router.delete("/unblock/{user_id}")
+
 async def unblock_user(
-    user_id: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    user_id: str, db: AsyncSession, current_user: dict
 ):
-    """
-    Unblock a user
-    """
     block = await db.execute(
         select(UserBlock).where(
             UserBlock.blocker_id == current_user['uid'],
@@ -415,11 +376,9 @@ async def unblock_user(
 
     return {"message": "User unblocked successfully"}
 
-@router.post("/report", response_model=UserReportResponse)
+
 async def report_user(
-    report: UserReportCreate,
-    db: AsyncSession = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    report: UserReportCreate, db: AsyncSession, current_user: dict
 ):
     """
     Report a user
@@ -444,14 +403,10 @@ async def report_user(
 
     return user_report
 
-@router.get("/list", response_model=List[FriendResponse])
+
 async def get_friends(
-    db: AsyncSession = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    db: AsyncSession, current_user: dict
 ):
-    """
-    Get list of all friends
-    """
     friends = await db.execute(
         select(Friend)
         .options(joinedload(Friend.friend))
@@ -460,11 +415,10 @@ async def get_friends(
     friends = friends.scalars().all()
     return friends
 
-@router.delete("/{friend_id}")
+
+
 async def remove_friend(
-    friend_id: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    friend_id: str, db: AsyncSession, current_user: dict
 ):
     """
     Remove a friend (bidirectional). Returns 404 if friendship doesn't exist.
@@ -500,10 +454,8 @@ async def remove_friend(
     return {"message": "Friend removed successfully"}
 
 
-@router.get("/blocked/list", response_model=List[BlockListResponse])
 async def get_blocked_users(
-    db: AsyncSession = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    db: AsyncSession, current_user: dict
 ):
     """
     Get a list of users that the current user has blocked.
@@ -514,3 +466,20 @@ async def get_blocked_users(
         select(UserBlock).where(UserBlock.blocker_id == current_user['uid'])
     )
     return result.scalars().all()
+
+
+async def are_friends(db: AsyncSession, user1_id: str, user2_id: str) -> bool:
+    """
+    Check if user1 and user2 are friends. Since friendships are stored bidirectionally,
+    check both directions.
+    """
+    stmt = select(Friend).where(
+        (Friend.user_id == user1_id) & (Friend.friend_id == user2_id)
+    )
+    
+    result = await db.execute(stmt)
+    friendship = result.scalar_one_or_none()
+
+    return friendship is not None
+
+

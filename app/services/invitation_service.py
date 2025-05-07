@@ -1,28 +1,18 @@
+from typing import List
 import uuid
 import random
 import string
 import logging
-
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import func, select
+from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.exc import IntegrityError
-from typing import List, Optional
-from pydantic import BaseModel
+from sqlalchemy import func, select
+from app.models import Invitation, InvitationCode, User
+from app.schemas.invitation import BulkInvitationCreate, PendingInvitationResponse
+from app.models.invite_code_create import InviteCodeCreate
 from datetime import datetime
 
-from ...init_db import get_db
-from app.models import User, Invitation
-from ...schemas.invitation import InvitationResponse
-from app.models import InvitationCode
-from app.models.invite_code_create import InviteCodeCreate
-from ...common import get_current_user
-
 # Configure logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-router = APIRouter(prefix="/invitations", tags=["invitations"])
 
 def generate_invite_code(length=6):
     # Create a pool of characters (uppercase letters and digits)
@@ -30,24 +20,7 @@ def generate_invite_code(length=6):
     # Generate a random code of specified length
     return ''.join(random.choice(characters) for _ in range(length))
 
-# First, let's update the schema for multiple invitations
-class InviteeInfo(BaseModel):
-    phone: str
-    email: Optional[str] = None
-
-class BulkInvitationCreate(BaseModel):
-    invitees: List[InviteeInfo]
-
-class PendingInvitationResponse(BaseModel):
-    phone_number: str
-    email: Optional[str]
-    invite_code: str
-    invited_at: datetime
-    status: str
-
-
-@router.post("/validate-code/", dependencies=[Depends(get_current_user)])
-async def validate_code(code: str, db: AsyncSession = Depends(get_db)):
+async def validate_code(code: str, db: AsyncSession):
     db_code = db.query(InvitationCode).filter(InvitationCode.code == code).first()
     if not db_code:
         raise HTTPException(status_code=404, detail="Invite Code not found")
@@ -59,10 +32,7 @@ async def validate_code(code: str, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Invite Code is not active")
     return {"message": "Invite Code is valid"}
 
-
-@router.post("/create-invite-code/", dependencies=[Depends(get_current_user)])
-async def create_invite_code(invite_code: InviteCodeCreate, db: AsyncSession = Depends(get_db)):
-    # Check if code already exists
+async def create_invite_code(invite_code: InviteCodeCreate, db: AsyncSession):
     db_code = db.query(InvitationCode).filter(InvitationCode.code == invite_code.code).first()
     if db_code:
         raise HTTPException(status_code=400, detail="Invitation code already exists")
@@ -79,13 +49,7 @@ async def create_invite_code(invite_code: InviteCodeCreate, db: AsyncSession = D
 
     return {"message": "Invitation code created successfully", "code": new_code.code}
 
-
-@router.post("/send", response_model=List[InvitationResponse])
-async def send_invitation(
-    invitation_data: BulkInvitationCreate,
-    current_user: dict = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
+async def send_invitation(invitation_data: BulkInvitationCreate, current_user: dict, db: AsyncSession):
     # Check if user exists
     stmt = select(User).where(User.id == current_user["uid"])
     inviter = db.execute(stmt).scalar_one_or_none()
@@ -132,12 +96,7 @@ async def send_invitation(
     
     return new_invitations
 
-
-@router.get("/stats", response_model=dict)
-async def get_invitation_stats(
-    current_user: dict = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
+async def get_invitation_stats(current_user: dict, db: AsyncSession):
     # Get total invitations sent
     stmt = select(func.count()).select_from(Invitation).where(Invitation.inviter_id == current_user["uid"])
     total_invites = db.execute(stmt).scalar_one()
@@ -154,12 +113,7 @@ async def get_invitation_stats(
         "accepted_invites": accepted_invites
     }
 
-@router.post("/pending-invitations", response_model=List[PendingInvitationResponse])
-async def get_pending_invitations(
-    phone_numbers: List[str],
-    current_user: dict = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
+async def get_pending_invitations(phone_numbers: List[str], current_user: dict, db: AsyncSession):
     # Get all pending invitations for these phone numbers
     stmt = select(Invitation).where(
         Invitation.inviter_id == current_user["uid"],
@@ -181,4 +135,3 @@ async def get_pending_invitations(
     ]
     
     return response 
-

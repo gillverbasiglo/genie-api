@@ -7,6 +7,13 @@ class WebSocketMessageType(str, Enum):
     FRIEND_REQUEST = "FRIEND_REQUEST"
     FRIEND_REQUEST_ACCEPTED = "FRIEND_REQUEST_ACCEPTED"
     FRIEND_REQUEST_REJECTED = "FRIEND_REQUEST_REJECTED"
+    FRIEND_REQUEST_CANCELLED = "FRIEND_REQUEST_cancelled"
+    PRIVATE_CHAT_MESSAGE = "newChatMessage"
+    MESSAGE_UPDATE = "messageUpdate"
+    TYPING_STATUS = "typingStatus"
+    SHARED_ITEM = "sharedItem"
+    USER_STATUS = "userStatus"
+    USER_ACTIVITY = "userActivity"
 
 # Base message schema
 class BaseWebSocketMessage(BaseModel):

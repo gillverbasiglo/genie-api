@@ -9,13 +9,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from ..init_db import get_db
+from ...init_db import get_db
 from app.models import User, Share, Notification, DeviceToken
-from ..schemas.shares import ShareResponse, ShareCreate, NotificationResponse
-from ..common import get_current_user
-from ..common import manager as WebSocketConnectManager
-from ..config import settings
-from ..services.user_service import get_user_by_id
+from ...schemas.shares import ShareResponse, ShareCreate, NotificationResponse
+from ...common import get_current_user
+from ...common import manager as WebSocketConnectManager
+from ...config import settings
+from ...services.user_service import get_user_by_id
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)

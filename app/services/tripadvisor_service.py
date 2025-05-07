@@ -1,69 +1,28 @@
-# tripadvisor_routes.py
 import httpx
 import logging
-
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
 from typing import Optional, List
-from enum import Enum
-
-from app.common import get_current_user
-from ..config import settings
+from fastapi import HTTPException
+from app.config import settings
+from app.schemas.tripadvisor import (
+    LocationCategory,
+    RadiusUnit,
+    TravelSearchResponse,
+    TravelDestinationDetail,
+    TravelPhotosResponse,
+    Location,
+    PhotoData
+)
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Create router
-router = APIRouter(prefix="/tripAdvisor", tags=["tripAdvisor"])
-
-# Get API key from AWS Secrets Manager like we did in the main.py file for groq
 API_KEY = settings.trip_advisor_api_key.get_secret_value()
 BASE_URL = "https://api.content.tripadvisor.com/api/v1"
-
-# Enum definitions
-class LocationCategory(str, Enum):
-    hotels = "hotels"
-    attractions = "attractions"
-    restaurants = "restaurants"
-    geos = "geos"
-
-class RadiusUnit(str, Enum):
-    kilometers = "km"
-    miles = "mi"
-    meters = "m"
-
-# Models for API response validation
-class Location(BaseModel):
-    location_id: str = Field(..., alias="location_id")
-    name: str
-    address_obj: Optional[dict] = None
-    latitude: Optional[float] = None
-    longitude: Optional[float] = None
-    
-class TravelSearchResponse(BaseModel):
-    data: List[Location]
-    
-class TravelDestinationDetail(BaseModel):
-    location_id: str
-    name: str
-    description: Optional[str] = None
-    # Add other fields based on actual API response
-    
-class PhotoData(BaseModel):
-    id: int
-    caption: Optional[str] = None
-    images: dict
-    
-class TravelPhotosResponse(BaseModel):
-    data: List[PhotoData]
 
 # HTTP client for making API requests
 async def get_client():
     return httpx.AsyncClient(timeout=20.0)
 
-# Endpoint for location search
-@router.get("/location/search", response_model=TravelSearchResponse, dependencies=[Depends(get_current_user)])
 async def search_locations(
     search_query: str,
     category: Optional[LocationCategory] = None,
@@ -113,13 +72,7 @@ async def search_locations(
             logger.error(f"Request error: {str(e)}")
             raise HTTPException(status_code=500, detail=f"Request error: {str(e)}")
 
-# Endpoint for location details
-@router.get("/location/{location_id}/details", response_model=TravelDestinationDetail, dependencies=[Depends(get_current_user)])
-async def get_location_details(
-    location_id: str,
-    language: str = "en",
-    currency: str = "USD"
-):
+async def get_location_details(location_id: str, language: str = "en", currency: str = "USD"):
     logger.debug(f"Fetching details for location ID: {location_id}")
     
     params = {
@@ -146,13 +99,7 @@ async def get_location_details(
             logger.error(f"Failed to decode location details: {str(e)}")
             raise HTTPException(status_code=500, detail=f"Error processing response: {str(e)}")
 
-# Endpoint for location photos
-@router.get("/location/{location_id}/photos", response_model=TravelPhotosResponse, dependencies=[Depends(get_current_user)])
-async def get_location_photos(
-    location_id: str,
-    language: str = "en",
-    limit: Optional[int] = None
-):
+async def get_location_photos(location_id: str, language: str = "en", limit: Optional[int] = None):
     logger.debug(f"Fetching photos for location ID: {location_id}")
     
     params = {
@@ -180,34 +127,3 @@ async def get_location_photos(
         except Exception as e:
             logger.error(f"Failed to decode location photos: {str(e)}")
             raise HTTPException(status_code=500, detail=f"Error processing response: {str(e)}")
-
-# Convenience endpoints
-@router.get("/hotels/{location}", response_model=TravelSearchResponse)
-async def search_hotels(location: str):
-    return await search_locations(search_query=location, category=LocationCategory.hotels)
-
-@router.get("/attractions/{location}", response_model=TravelSearchResponse)
-async def search_attractions(location: str):
-    return await search_locations(search_query=location, category=LocationCategory.attractions)
-
-@router.get("/restaurants/{location}", response_model=TravelSearchResponse)
-async def search_restaurants(location: str):
-    return await search_locations(search_query=location, category=LocationCategory.restaurants)
-
-@router.get("/nearby", response_model=TravelSearchResponse, dependencies=[Depends(get_current_user)])
-async def search_nearby(
-    query: str,
-    latitude: float,
-    longitude: float,
-    radius: int = 5000,
-    unit: RadiusUnit = RadiusUnit.meters,
-    category: Optional[LocationCategory] = None
-):
-    lat_long = f"{latitude},{longitude}"
-    return await search_locations(
-        search_query=query,
-        category=category,
-        lat_long=lat_long,
-        radius=radius,
-        radius_unit=unit
-    )
