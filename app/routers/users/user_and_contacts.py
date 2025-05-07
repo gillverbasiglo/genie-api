@@ -36,8 +36,9 @@ async def update_archetypes_and_keywords(
             detail="User not found"
         )
 
-    user.archetypes = request.archetypes
-    user.keywords = request.keywords
+    # Convert Pydantic models to dictionaries using model_dump instead of dict
+    user.archetypes = [archetype.model_dump() for archetype in request.archetypes]
+    user.keywords = [keyword.model_dump() for keyword in request.keywords]
 
     await db.commit()
     await db.refresh(user)
@@ -73,13 +74,15 @@ async def check_contacts(
 ):
     # Check if user exists
     stmt = select(User).where(User.id == current_user["uid"])
-    inviter = db.execute(stmt).scalar_one_or_none()
+    query_result = await db.execute(stmt)
+    inviter = query_result.scalar_one_or_none()
     if inviter is None:
         raise HTTPException(status_code=404, detail="User not found")
     
     # Query users with these phone numbers
     stmt = select(User).where(User.phone_number.in_(phone_numbers))
-    users = db.execute(stmt).scalars().all()
+    query_result = await db.execute(stmt)
+    users = query_result.scalars().all()
     user_map = {user.phone_number: user for user in users}
     
     # Query pending invitations for these phone numbers
@@ -88,7 +91,8 @@ async def check_contacts(
         Invitation.invitee_phone.in_(phone_numbers),
         Invitation.status == "pending"
     )
-    pending_invites = db.execute(stmt).scalars().all()
+    query_result = await db.execute(stmt)
+    pending_invites = query_result.scalars().all()
     invite_map = {invite.invitee_phone: invite for invite in pending_invites}
     
     # Create response for each phone number
@@ -127,10 +131,11 @@ async def register_user(
 
         # If invite code is provided, link it to the invitation
         if user_data.invite_code:
-            invitation = db.execute(select(Invitation).where(
+            query_result = await db.execute(select(Invitation).where(
                 Invitation.invite_code == user_data.invite_code,
                 Invitation.status == "pending"
-            )).scalar_one_or_none()
+            ))
+            invitation = query_result.scalar_one_or_none()
 
             if invitation:
                 # Update invitation status

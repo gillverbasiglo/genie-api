@@ -495,16 +495,21 @@ async def get_friend_portal_recommendations(
     if current_user["uid"] == friend_id:
         raise HTTPException(status_code=403, detail="You cannot access your own portal through this endpoint")
     
-    user = get_user_by_id(db, current_user["uid"])
+    user = await get_user_by_id(db, current_user["uid"])
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
-    friend = get_user_by_id(db, friend_id)
+    friend = await get_user_by_id(db, friend_id)
     if not friend:
         raise HTTPException(status_code=404, detail="Friend not found")
     
-    if not user.archetypes or not friend.archetypes:
-        raise HTTPException(status_code=400, detail="User or friend archetypes not found")
+    # check if user.archetypes is a list and not empty
+    if not isinstance(user.archetypes, list) or not user.archetypes:
+        raise HTTPException(status_code=400, detail="User archetypes not found")
+    
+    # check if friend.archetypes is a list and not empty
+    if not isinstance(friend.archetypes, list) or not friend.archetypes:
+        raise HTTPException(status_code=400, detail="Friend archetypes not found")
     
     try:
         common_archetypes = find_common_archetypes(user.archetypes, friend.archetypes)

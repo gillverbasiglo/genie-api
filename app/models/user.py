@@ -1,4 +1,5 @@
 from sqlalchemy import Column, String, DateTime, ForeignKey, ARRAY, Boolean, Enum
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from datetime import datetime, timezone
@@ -15,8 +16,9 @@ class User(Base):
     display_name = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), default=datetime.now(timezone.utc))
     invited_by = Column(String, ForeignKey("users.id"), nullable=True)
-    archetypes = Column(ARRAY(String), nullable=True)
-    keywords = Column(ARRAY(String), nullable=True)
+    # Using JSONB for better query performance
+    archetypes = Column(JSONB, nullable=True)
+    keywords = Column(JSONB, nullable=True)
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     is_active = Column(Boolean, default=True)
     status = Column(Enum(UserStatus), default=UserStatus.ACTIVE)
