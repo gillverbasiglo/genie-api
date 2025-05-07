@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+CLIENT_ID=$(aws ssm get-parameter --name /github/client_id \
+       --with-decryption --query 'Parameter.Value' --output text)
+INSTALL_ID=$(aws ssm get-parameter --name /github/install_id \
+       --with-decryption --query 'Parameter.Value' --output text)
+
+# fetch key from SSM
+PEM=$(aws ssm get-parameter --name /github/application_private_key \
+       --with-decryption --query 'Parameter.Value' --output text)
+
+# create a 10-min JWT for the App
+JWT=$(python - <<'PY'
+import jwt, os, time, sys, textwrap, json
+pem, client_id = os.environ['PEM'], os.environ['CLIENT_ID']
+print(jwt.encode(
+    {"iat": int(time.time()) - 60, "exp": int(time.time()) + 600, "iss": client_id},
+    pem, algorithm="RS256"))
+PY
+)
+
+# exchange for a 60-min installation token
+TOKEN=$(curl -s -X POST \
+  -H "Authorization: Bearer $JWT" \
+  -H "Accept: application/vnd.github+json" \
+  https://api.github.com/app/installations/$INSTALL_ID/access_tokens |
+  jq -r .token)
+
+# clone or pull
+GIT_ASKPASS=/bin/echo \
+git clone --depth 1 "https://x-access-token:${TOKEN}@github.com/ORG/REPO.git" /home/ubuntu/genie-backend || \
+git -C /home/ubuntu/genie-backend fetch --depth 1 && git -C /home/ubuntu/genie-backend reset --hard origin/main
