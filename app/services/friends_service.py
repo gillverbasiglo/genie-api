@@ -188,12 +188,6 @@ async def update_friend_request_status(
     # ✅ Send WebSocket notification on ACCEPTED or REJECTED
     if update.status in [FriendRequestStatus.ACCEPTED, FriendRequestStatus.REJECTED, FriendRequestStatus.CANCELLED]:
         try:
-            #notification = {
-            #    "type": WebSocketMessageType.FRIEND_REQUEST_ACCEPTED if update.status == FriendRequestStatus.ACCEPTED else WebSocketMessageType.FRIEND_REQUEST_REJECTED,
-            #    "message": f"{current_user['name']} accepted your friend request." if update.status == FriendRequestStatus.ACCEPTED else f"{current_user['name']} rejected your friend request.",
-            #    "from_user_id": current_user['uid'],
-            #    "to_user_id": friend_request.from_user_id
-            #}
             if update.status == FriendRequestStatus.ACCEPTED:
                 notification = {
                     "type": WebSocketMessageType.FRIEND_REQUEST_ACCEPTED,
@@ -483,11 +477,6 @@ async def are_friends(db: AsyncSession, user1_id: str, user2_id: str) -> bool:
         (Friend.user_id == user1_id) & (Friend.friend_id == user2_id)
     )
     
-    #bidirectional verification
-    #stmt = select(Friend).where(
-    #((Friend.user_id == user1_id) & (Friend.friend_id == user2_id)) |
-    #((Friend.user_id == user2_id) & (Friend.friend_id == user1_id)))
-
     result = await db.execute(stmt)
     friendship = result.scalar_one_or_none()
 
