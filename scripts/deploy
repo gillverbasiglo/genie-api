@@ -31,14 +31,36 @@ TOKEN=$(curl -s -X POST \
 if [ -d "/home/ubuntu/genie-backend" ]; then
     # If directory exists, ensure we have a fresh token and update
     git -C /home/ubuntu/genie-backend remote set-url origin "https://x-access-token:${TOKEN}@github.com/GenieTheAI/genie-api.git"
-    git -C /home/ubuntu/genie-backend config --local --unset credential.helper
+    git -C /home/ubuntu/genie-backend config --local --unset credential.helper || true
+    
+    # Get current commit hash
+    OLD_COMMIT=$(git -C /home/ubuntu/genie-backend rev-parse HEAD)
+    echo "Current commit: $OLD_COMMIT" >&2
+    
+    # Perform the update
     GIT_ASKPASS=/bin/echo \
     git -C /home/ubuntu/genie-backend fetch --depth 1 && \
     git -C /home/ubuntu/genie-backend reset --hard origin/main
+    
+    # Get new commit hash and compare
+    NEW_COMMIT=$(git -C /home/ubuntu/genie-backend rev-parse HEAD)
+    echo "New commit: $NEW_COMMIT" >&2
+    
+    if [ "$OLD_COMMIT" != "$NEW_COMMIT" ]; then
+        echo "Repository updated from $OLD_COMMIT to $NEW_COMMIT" >&2
+    else
+        echo "Repository is up to date at $NEW_COMMIT" >&2
+    fi
 else
     # If directory doesn't exist, clone fresh
     git config --global --unset credential.helper || true
     rm -f ~/.git-credentials
+    
+    # Perform the clone
     GIT_ASKPASS=/bin/echo \
     git clone --depth 1 "https://x-access-token:${TOKEN}@github.com/GenieTheAI/genie-api.git" /home/ubuntu/genie-backend
+    
+    # Show the commit hash after cloning
+    COMMIT=$(git -C /home/ubuntu/genie-backend rev-parse HEAD)
+    echo "Repository cloned at $COMMIT" >&2
 fi
