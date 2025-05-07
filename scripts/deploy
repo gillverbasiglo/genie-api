@@ -1,66 +1,123 @@
 #!/usr/bin/env bash
+
+# Configuration
+REPO_PATH="/home/ubuntu/genie-backend"
+REPO_URL="github.com/GenieTheAI/genie-api.git"
+BRANCH="main"
+MAX_RETRIES=3
+RETRY_DELAY=5
+
+# Logging functions
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >&2
+}
+
+error() {
+    log "ERROR: $1" >&2
+    exit 1
+}
+
+# Cleanup function
+cleanup() {
+    local exit_code=$?
+    if [ $exit_code -ne 0 ]; then
+        log "Script failed with exit code $exit_code"
+    fi
+    # Clear sensitive data
+    unset PEM TOKEN JWT
+    exit $exit_code
+}
+
+# Set up error handling
 set -euo pipefail
+trap cleanup EXIT
 
+# Validate required commands
+for cmd in aws python3 curl jq git; do
+    if ! command -v $cmd &> /dev/null; then
+        error "$cmd is required but not installed"
+    fi
+done
+
+# Fetch credentials from SSM
+log "Fetching credentials from SSM"
 CLIENT_ID=$(aws ssm get-parameter --name /github/client_id \
-       --with-decryption --query 'Parameter.Value' --output text)
+    --with-decryption --query 'Parameter.Value' --output text) || error "Failed to fetch client_id"
 INSTALL_ID=$(aws ssm get-parameter --name /github/install_id \
-       --with-decryption --query 'Parameter.Value' --output text)
-
-# fetch key from SSM
+    --with-decryption --query 'Parameter.Value' --output text) || error "Failed to fetch install_id"
 PEM=$(aws ssm get-parameter --name /github/application_private_key \
-       --with-decryption --query 'Parameter.Value' --output text)
+    --with-decryption --query 'Parameter.Value' --output text) || error "Failed to fetch private key"
 
-# create a 10-min JWT for the App
-JWT=$(PEM="$PEM" CLIENT_ID="$CLIENT_ID" python3 - <<'PY'
-import jwt, os, time, sys, textwrap, json
-pem, client_id = os.environ['PEM'], os.environ['CLIENT_ID']
-print(jwt.encode(
-    {"iat": int(time.time()) - 60, "exp": int(time.time()) + 600, "iss": client_id},
-    pem, algorithm="RS256"))
+# Generate JWT with retry logic
+log "Generating JWT"
+for ((i=1; i<=MAX_RETRIES; i++)); do
+    JWT=$(PEM="$PEM" CLIENT_ID="$CLIENT_ID" python3 - <<'PY'
+import jwt, os, time, sys
+try:
+    pem, client_id = os.environ['PEM'], os.environ['CLIENT_ID']
+    print(jwt.encode(
+        {"iat": int(time.time()) - 60, "exp": int(time.time()) + 600, "iss": client_id},
+        pem, algorithm="RS256"))
+except Exception as e:
+    print(f"Error: {str(e)}", file=sys.stderr)
+    sys.exit(1)
 PY
-)
+    ) && break
+    log "JWT generation attempt $i failed, retrying in $RETRY_DELAY seconds..."
+    sleep $RETRY_DELAY
+done
 
-# exchange for a 60-min installation token
-TOKEN=$(curl -s -X POST \
-  -H "Authorization: Bearer $JWT" \
-  -H "Accept: application/vnd.github+json" \
-  https://api.github.com/app/installations/$INSTALL_ID/access_tokens |
-  jq -r .token)
+[ -z "$JWT" ] && error "Failed to generate JWT after $MAX_RETRIES attempts"
 
-# clone or pull
-if [ -d "/home/ubuntu/genie-backend" ]; then
-    # If directory exists, ensure we have a fresh token and update
-    git -C /home/ubuntu/genie-backend remote set-url origin "https://x-access-token:${TOKEN}@github.com/GenieTheAI/genie-api.git"
-    git -C /home/ubuntu/genie-backend config --local --unset credential.helper || true
+# Get installation token with retry logic
+log "Fetching installation token"
+for ((i=1; i<=MAX_RETRIES; i++)); do
+    TOKEN=$(curl -s -X POST \
+        -H "Authorization: Bearer $JWT" \
+        -H "Accept: application/vnd.github+json" \
+        https://api.github.com/app/installations/$INSTALL_ID/access_tokens | \
+        jq -r '.token') && [ -n "$TOKEN" ] && break
+    log "Token fetch attempt $i failed, retrying in $RETRY_DELAY seconds..."
+    sleep $RETRY_DELAY
+done
+
+[ -z "$TOKEN" ] && error "Failed to fetch installation token after $MAX_RETRIES attempts"
+
+# Verify token works
+log "Verifying token"
+if ! curl -s -H "Authorization: token $TOKEN" "https://api.github.com/repos/$REPO_URL" > /dev/null; then
+    error "Token verification failed"
+fi
+
+# Update or clone repository
+if [ -d "$REPO_PATH" ]; then
+    log "Updating existing repository"
+    git -C "$REPO_PATH" remote set-url origin "https://x-access-token:${TOKEN}@$REPO_URL" || error "Failed to update remote URL"
+    git -C "$REPO_PATH" config --local --unset credential.helper || true
     
-    # Get current commit hash
-    OLD_COMMIT=$(git -C /home/ubuntu/genie-backend rev-parse HEAD)
-    echo "Current commit: $OLD_COMMIT" >&2
+    OLD_COMMIT=$(git -C "$REPO_PATH" rev-parse HEAD)
+    log "Current commit: $OLD_COMMIT"
     
-    # Perform the update
     GIT_ASKPASS=/bin/echo \
-    git -C /home/ubuntu/genie-backend fetch --depth 1 && \
-    git -C /home/ubuntu/genie-backend reset --hard origin/main
+    git -C "$REPO_PATH" fetch --depth 1 && \
+    git -C "$REPO_PATH" reset --hard origin/$BRANCH || error "Failed to update repository"
     
-    # Get new commit hash and compare
-    NEW_COMMIT=$(git -C /home/ubuntu/genie-backend rev-parse HEAD)
-    echo "New commit: $NEW_COMMIT" >&2
-    
+    NEW_COMMIT=$(git -C "$REPO_PATH" rev-parse HEAD)
     if [ "$OLD_COMMIT" != "$NEW_COMMIT" ]; then
-        echo "Repository updated from $OLD_COMMIT to $NEW_COMMIT" >&2
+        log "Repository updated from $OLD_COMMIT to $NEW_COMMIT"
     else
-        echo "Repository is up to date at $NEW_COMMIT" >&2
+        log "Repository is up to date at $NEW_COMMIT"
     fi
 else
-    # If directory doesn't exist, clone fresh
+    log "Cloning repository"
     git config --global --unset credential.helper || true
     rm -f ~/.git-credentials
     
-    # Perform the clone
     GIT_ASKPASS=/bin/echo \
-    git clone --depth 1 "https://x-access-token:${TOKEN}@github.com/GenieTheAI/genie-api.git" /home/ubuntu/genie-backend
+    git clone --depth 1 "https://x-access-token:${TOKEN}@$REPO_URL" "$REPO_PATH" || error "Failed to clone repository"
     
-    # Show the commit hash after cloning
-    COMMIT=$(git -C /home/ubuntu/genie-backend rev-parse HEAD)
-    echo "Repository cloned at $COMMIT" >&2
+    COMMIT=$(git -C "$REPO_PATH" rev-parse HEAD)
+    log "Repository cloned at $COMMIT"
 fi
+
+log "Deployment completed successfully"
