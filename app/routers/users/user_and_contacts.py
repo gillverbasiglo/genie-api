@@ -1,7 +1,7 @@
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func, select, String, not_
+from sqlalchemy import func, select, String, not_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
@@ -201,3 +201,61 @@ async def check_contacts(
 @router.get("/{user_id}/online-status")
 async def check_user_online_status(user_id: str):
     return {"user_id": user_id, "online": manager.is_user_online(user_id)}
+
+@router.delete("/delete/{identifier}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_user(
+    identifier: str,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Delete a user by their ID or phone number.
+    Only allows users to delete their own account.
+    """
+    # Query user by either ID or phone number
+    stmt = select(User).where(
+        or_(
+            User.id == identifier,
+            User.phone_number == identifier
+        )
+    )
+    result = await db.execute(stmt)
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+
+    try:
+        # Delete all related records first
+        # Delete friends relationships
+        await db.execute(select(Friend).where(
+            or_(
+                Friend.user_id == user.id,
+                Friend.friend_id == user.id
+            )
+        ))
+        
+        # Delete invitations
+        await db.execute(select(Invitation).where(
+            or_(
+                Invitation.inviter_id == user.id,
+                Invitation.invitee_id == user.id
+            )
+        ))
+
+        # Delete the user
+        await db.delete(user)
+        await db.commit()
+
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"Error deleting user {identifier}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to delete user"
+        )
+
+    return None
