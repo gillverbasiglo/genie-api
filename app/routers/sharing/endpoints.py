@@ -10,11 +10,12 @@ from sqlalchemy import select
 from app.schemas.notifications import NotificationType
 from app.init_db import get_db
 from app.models import User, Share, Notification, DeviceToken
-from app.schemas.shares import ShareResponse, ShareCreate, NotificationResponse
+from app.schemas.shares import ShareListResponse, ShareResponse, ShareCreate, NotificationResponse
 from app.common import get_current_user
 from app.common import manager as WebSocketConnectManager
 from app.config import settings
 from app.services.user_service import get_user_by_id
+from sqlalchemy.orm import joinedload
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -201,7 +202,7 @@ async def share_content(
 
 
 
-@router.get("/list", response_model=List[ShareCreate])
+@router.get("/list", response_model=List[ShareListResponse])
 async def get_shared_posts(
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
@@ -209,6 +210,8 @@ async def get_shared_posts(
     # Get all pending invitations for these phone numbers
     stmt = select(Share).where(
         Share.to_user_id == current_user["uid"]
+    ).options(
+        joinedload(Share.from_user)
     )
     shares = await db.execute(stmt)
     shares = shares.scalars().all()
