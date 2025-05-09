@@ -3,6 +3,8 @@ from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime
 
+from app.schemas.users import MeUserResponse
+
 class ShareBase(BaseModel):
     content_id: str
     content_type: str
@@ -11,6 +13,16 @@ class ShareBase(BaseModel):
 
 class ShareCreate(ShareBase):
     to_user_id: str
+
+class ShareListResponse(BaseModel):
+    id: str
+    from_user: MeUserResponse
+    to_user_id: str
+    created_at: datetime
+    content_id: str
+    content_type: str
+    message: Optional[str] = None
+    title: Optional[str] = None
 
 class ResponsePayload(BaseModel):
     success: bool
