@@ -75,36 +75,36 @@ async def check_contacts(
     user_id: str,
     db: AsyncSession
 ) -> List[ContactCheckResponse]:
-    # Validate inviter exists
-    result = await db.execute(select(User).where(User.id == user_id))
-    inviter = result.scalar_one_or_none()
+    
+    # Check if user exists
+    stmt = select(User).where(User.id == user_id)
+    query_result = await db.execute(stmt)
+    inviter = query_result.scalar_one_or_none()
     if inviter is None:
         raise HTTPException(status_code=404, detail="User not found")
-
-    # Get registered users
-    result = await db.execute(
-        select(User).where(User.phone_number.in_(phone_numbers))
-    )
-    users = result.scalars().all()
+    
+    # Query users with these phone numbers
+    stmt = select(User).where(User.phone_number.in_(phone_numbers))
+    query_result = await db.execute(stmt)
+    users = query_result.scalars().all()
     user_map = {user.phone_number: user for user in users}
-
-    # Get pending invitations
-    result = await db.execute(
-        select(Invitation).where(
-            Invitation.inviter_id == user_id,
-            Invitation.invitee_phone.in_(phone_numbers),
-            Invitation.status == "pending"
-        )
+    
+    # Query pending invitations for these phone numbers
+    stmt = select(Invitation).where(
+        Invitation.inviter_id == user_id,
+        Invitation.invitee_phone.in_(phone_numbers),
+        Invitation.status == "pending"
     )
-    pending_invites = result.scalars().all()
+    query_result = await db.execute(stmt)
+    pending_invites = query_result.scalars().all()
     invite_map = {invite.invitee_phone: invite for invite in pending_invites}
-
-    # Build response
+    
+    # Create response for each phone number
     response = []
     for phone in phone_numbers:
         user = user_map.get(phone)
         invite = invite_map.get(phone)
-
+        
         response.append(ContactCheckResponse(
             phone_number=phone,
             is_registered=user is not None,
@@ -114,7 +114,7 @@ async def check_contacts(
             invite_code=invite.invite_code if invite else None,
             invited_at=invite.created_at if invite else None
         ))
-
+    
     return response
 
 async def register_user(
@@ -123,27 +123,29 @@ async def register_user(
     db: AsyncSession
 ) -> Dict[str, str]:
     try:
-        # Create a new user instance
+        # Create new user
         new_user = User(
             id=user_id,
-            phone_number=user_data.phone_number,
+            phone_number= user_data.phone_number,
             email=user_data.email,
             display_name=user_data.display_name,
-            created_at=datetime.now(timezone.UTC)
+            created_at=datetime.now(timezone.utc)
         )
 
-        # Handle invitation logic if invite code is provided
+        # If invite code is provided, link it to the invitation
         if user_data.invite_code:
-            result = await db.execute(select(Invitation).where(
+            query_result = await db.execute(select(Invitation).where(
                 Invitation.invite_code == user_data.invite_code,
                 Invitation.status == "pending"
             ))
-            invitation = result.scalar_one_or_none()
+            invitation = query_result.scalar_one_or_none()
 
             if invitation:
+                # Update invitation status
                 invitation.status = "accepted"
                 invitation.accepted_at = datetime.now(timezone.UTC)
                 invitation.invitee_id = user_id
+                # Set the invited_by relationship
                 new_user.invited_by = invitation.inviter_id
 
         db.add(new_user)
@@ -157,19 +159,19 @@ async def register_user(
         }
 
     except IntegrityError:
-        await db.rollback()
+        db.rollback()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="User is either already registered or the phone/email is already in use"
+            detail="User is either logged in or this phone or email already exists"
         )
     except Exception as e:
-        await db.rollback()
+        db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error registering user: {str(e)}"
         )
     
-async def check_contacts(
+async def check_contacts_list(
     phone_number: str,
     current_user_id: str,
     db: AsyncSession

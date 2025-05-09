@@ -14,7 +14,7 @@ from app.schemas.invitation import ContactCheckResponse
 from app.schemas.users import UserCreate, MeUserResponse, UpdateArchetypesAndKeywordsRequest
 from app.common import get_current_user
 from app.core.websocket.websocket_manager import manager
-from app.services.user_service import check_contacts, delete_user, get_current_user_info, register_user, update_user_archetypes_and_keywords
+from app.services.user_service import check_contacts, check_contacts_list, delete_user, get_current_user_info, register_user, update_user_archetypes_and_keywords
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -67,13 +67,13 @@ async def register_user_api(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/list", response_model=List[MeUserResponse])
-async def check_contacts_api(
+async def check_contacts_list_api(
     phone_number: str,
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     try:
-        return await check_contacts(phone_number, current_user["uid"], db)
+        return await check_contacts_list(phone_number, current_user["uid"], db)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
