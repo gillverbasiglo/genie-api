@@ -37,18 +37,6 @@ class MessageHandler:
         receiver_id = message_data.get("receiver_id")
         content = message_data.get("content")
         timestamp = datetime.now()
-        
-        # ✅ Check friendship
-        if not await are_friends(self.db, user_id, receiver_id):
-            logger.warning(f"User {user_id} is not friends with {receiver_id}. Message blocked.")
-            await self.manager.send_personal_message(
-                user_id,
-                {
-                    "type": "error",
-                    "message": f"You are not friends with {receiver_id}. Cannot send message."
-                }
-            )
-            return
 
         # Save message to the database
         new_message = Message(
