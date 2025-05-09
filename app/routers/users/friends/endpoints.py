@@ -19,7 +19,7 @@ from app.schemas.friends import (
     FriendRequestType,
     FriendRequestResponse
 )
-from app.services.friends_service import get_blocked_users, get_friend_requests, get_friend_status, report_user, send_friend_request, unblock_user, update_friend_request_status
+from app.services.friends_service import get_blocked_users, get_friend_requests, get_friend_status, get_friends, report_user, send_friend_request, unblock_user, update_friend_request_status
 
 router = APIRouter(prefix="/friends", tags=["friends"])
 
@@ -113,12 +113,12 @@ async def report_user_api(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/list", response_model=List[FriendResponse])
-async def get_friends(
+async def get_friends_api(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
     try:
-        return await report_user(db, current_user)
+        return await get_friends(db, current_user)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     
