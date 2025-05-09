@@ -47,7 +47,6 @@ class FriendRequestUpdate(BaseModel):
 class FriendResponse(BaseModel):
     id: str
     user_id: str
-    friend_id: str
     created_at: datetime
     friend: UserFriendResponse
 

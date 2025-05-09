@@ -4,6 +4,7 @@ from enum import Enum
 from datetime import datetime
 
 class UserCreate(BaseModel):
+    id: str
     phone_number: str
     email: Optional[str] = None
     display_name: Optional[str] = None
