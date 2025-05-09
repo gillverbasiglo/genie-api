@@ -18,7 +18,7 @@ from app.routers.recommendations.endpoints import router as RecommendationsEndpo
 from app.routers.device_tokens.endpoints import router as DeviceTokenEndpoints
 from app.routers.search import router as SearchEndpoints
 from app.routers.users.friends.endpoints import router as FriendsEndpoints
-from app.routers.users.user_and_contacts import router as UserAndContacts
+from app.routers.users.endpoints import router as UserAndContacts
 from app.routers.websocket.endpoints import router as WebSocketEndpoints
 from app.routers.chat.endpoints import router as ChatEndPoints
 from app.routers.notifications.endpoints import router as NotificationsEndpoints
