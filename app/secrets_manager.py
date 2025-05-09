@@ -1,6 +1,5 @@
 import json
 import boto3
-import tempfile
 import os
 from functools import lru_cache
 from typing import Dict, Any

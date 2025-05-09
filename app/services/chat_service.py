@@ -3,6 +3,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import and_, or_
 from app.models.chat.private_chat_message import Message
+from sqlalchemy import func
+
+from app.schemas.private_chat_message import MessageStatus
 
 logger = logging.getLogger(__name__)
 
@@ -35,3 +38,18 @@ async def get_paginated_private_messages(
         "messages": messages[:limit],
         "has_more": has_more
     }
+
+async def get_unread_message_count(
+    db: AsyncSession,
+    receiver_id: str
+):
+    query = select(func.count(Message.id)).where(
+        and_(
+            Message.receiver_id == receiver_id,
+            Message.status != MessageStatus.READ
+        )
+    )
+    
+    result = await db.execute(query)
+    return result.scalar_one()
+

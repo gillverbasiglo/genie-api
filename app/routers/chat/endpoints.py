@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.init_db import get_db
 from app.schemas.private_chat_message import PaginatedMessagesResponse
-from app.services.chat_service import get_paginated_private_messages
+from app.services.chat_service import get_paginated_private_messages, get_unread_message_count
 
 logger = logging.getLogger(__name__)
 

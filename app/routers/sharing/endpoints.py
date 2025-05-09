@@ -4,30 +4,23 @@ import asyncio
 import httpx
 from typing import List, Dict, Any
 from pydantic import BaseModel
-
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-
-from ...init_db import get_db
+from app.schemas.notifications import NotificationType
+from app.init_db import get_db
 from app.models import User, Share, Notification, DeviceToken
-from ...schemas.shares import ShareResponse, ShareCreate, NotificationResponse
-from ...common import get_current_user
-from ...common import manager as WebSocketConnectManager
-from ...config import settings
-from ...services.user_service import get_user_by_id
+from app.schemas.shares import ShareResponse, ShareCreate, NotificationResponse
+from app.common import get_current_user
+from app.common import manager as WebSocketConnectManager
+from app.config import settings
+from app.services.user_service import get_user_by_id
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/share", tags=["share"])
-
-class TestNotificationPayload(BaseModel):
-    device_token: str
-    title: str
-    message: str
-    badge: int = 1
 
 async def send_single_notification(device_token: str, notification: Notification) -> Dict[str, Any]:
     """
@@ -145,7 +138,7 @@ async def share_content(
         # Create notification for the recipient
         notification = Notification(
             user_id=to_user.id,
-            type="share",
+            type=NotificationType.SHARE,
             title=share_data.title,
             message=share_data.message,
             data=json.dumps({

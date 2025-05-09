@@ -4,8 +4,8 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from datetime import datetime, timezone
 
-from ..database import Base
-from ..schemas.users import UserStatus
+from app.database import Base
+from app.schemas.users import UserStatus
 
 class User(Base):
     __tablename__ = "users"
