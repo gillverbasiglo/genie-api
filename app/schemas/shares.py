@@ -16,7 +16,7 @@ class ShareCreate(ShareBase):
 
 class ShareListResponse(BaseModel):
     id: str
-    from_user_id: MeUserResponse
+    from_user: MeUserResponse
     to_user_id: str
     created_at: datetime
     content_id: str
