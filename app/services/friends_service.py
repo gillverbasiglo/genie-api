@@ -5,8 +5,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_, delete
 from sqlalchemy.orm import joinedload
 from app.models import User, FriendRequest, Friend, UserBlock, UserReport
+from app.models.notifications import Notification
 from app.schemas.friends import FriendRequestCreate, FriendRequestType, FriendRequestUpdate, FriendRequestStatus
 from app.schemas.friends import FriendStatusResponse, UserBlockCreate, UserReportCreate
+from app.schemas.notifications import NotificationType
 from app.schemas.websocket import WebSocketMessageType
 from app.core.websocket.websocket_manager import manager
 
@@ -86,6 +88,17 @@ async def send_friend_request(
     await db.commit()
     await db.refresh(friend_request)
 
+    # Save in notification table
+    notification = Notification(
+        user_id=request.to_user_id,
+        type=NotificationType.FRIEND_REQUEST,
+        title="New friend request.",
+        message=f"{current_user['uid']} sent you a friend request."
+    )
+    db.add(notification)
+    await db.commit()
+    await db.refresh(notification)
+
     # ✅ Send WebSocket notification if the user is connected
     try:
         notification = {
@@ -144,24 +157,25 @@ async def get_friend_requests(
 async def update_friend_request_status(
     request_id: str, update: FriendRequestUpdate, db: AsyncSession, current_user: dict
 ):
+    # Fetch friend request
     result = await db.execute(
         select(FriendRequest).where(
             FriendRequest.id == request_id
             )
     )
-    
     friend_request = result.scalar_one_or_none()
 
+    # Check if friend request exists    
     if not friend_request:
         raise HTTPException(status_code=404, detail="Friend request not found")
 
+    # Check if friend request is pending
     if friend_request.status != FriendRequestStatus.PENDING:
         raise HTTPException(status_code=400, detail="Friend request is not pending")
 
     # Authorization checks
     if update.status == FriendRequestStatus.CANCELLED and friend_request.from_user_id != current_user['uid']:
         raise HTTPException(status_code=403, detail="Only the sender can cancel the request")
-
     if update.status in [FriendRequestStatus.ACCEPTED, FriendRequestStatus.REJECTED] and friend_request.to_user_id != current_user['uid']:
         raise HTTPException(status_code=403, detail="Only the recipient can accept or reject the request")
 
@@ -184,6 +198,20 @@ async def update_friend_request_status(
             db.add_all([friendship1, friendship2])
             await db.commit()
         await db.refresh(friend_request)
+
+
+
+    # Save in notification table
+    if update.status in [FriendRequestStatus.ACCEPTED]:
+        notification = Notification(
+            user_id=friend_request.from_user_id,
+            type=NotificationType.FRIEND_REQUEST,
+            title="Friend request accepted.",
+            message=f"{current_user['uid']} accepted your friend request."
+        )
+        db.add(notification)
+        await db.commit()
+        await db.refresh(notification)
 
     # ✅ Send WebSocket notification on ACCEPTED or REJECTED
     if update.status in [FriendRequestStatus.ACCEPTED, FriendRequestStatus.REJECTED, FriendRequestStatus.CANCELLED]:

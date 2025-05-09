@@ -1,12 +1,21 @@
 # schemas.py
+from typing import List, Optional
 from pydantic import BaseModel
 from datetime import datetime
+from enum import Enum as PyEnum
+
+class NotificationType(str, PyEnum):
+    SHARE = "share"
+    LIKE = "like"
+    COMMENT = "comment"
+    FOLLOW = "follow"
+    FRIEND_REQUEST = "friend_request"
 
 class NotificationBase(BaseModel):
-    type: str
+    type: NotificationType
     title: str
     message: str
-    data: str  # JSON data as string
+    data: Optional[str] = None
 
 class NotificationCreate(NotificationBase):
     user_id: int
@@ -19,4 +28,8 @@ class NotificationResponse(NotificationBase):
     
     class Config:
         from_attributes = True
+
+class NotificationStatusUpdate(BaseModel):
+    ids: List[str]
+    is_read: bool = True
                 

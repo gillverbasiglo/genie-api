@@ -1,9 +1,8 @@
+import uuid
 from sqlalchemy import Column, String, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-import uuid
-
-from ...database import Base
+from app.database import Base
 
 class Friend(Base):
     __tablename__ = "friends"

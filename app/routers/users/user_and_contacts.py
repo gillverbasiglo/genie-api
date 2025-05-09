@@ -8,11 +8,11 @@ from typing import List, Optional
 from pydantic import BaseModel
 from datetime import datetime, timezone
 
-from ...init_db import get_db
+from app.init_db import get_db
 from app.models import User, Invitation, Friend
-from ...schemas.invitation import ContactCheckResponse
-from ...schemas.users import UserCreate, MeUserResponse, UpdateArchetypesAndKeywordsRequest
-from ...common import get_current_user
+from app.schemas.invitation import ContactCheckResponse
+from app.schemas.users import UserCreate, MeUserResponse, UpdateArchetypesAndKeywordsRequest
+from app.common import get_current_user
 from app.core.websocket.websocket_manager import manager
 
 # Configure logging

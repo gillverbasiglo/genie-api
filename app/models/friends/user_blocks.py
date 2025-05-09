@@ -3,7 +3,7 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import uuid
 
-from ...database import Base
+from app.database import Base
 
 class UserBlock(Base):
     __tablename__ = "user_blocks"

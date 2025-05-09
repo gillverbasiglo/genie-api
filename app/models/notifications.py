@@ -1,7 +1,8 @@
+import enum
 import uuid
 from sqlalchemy import Column, String, DateTime, ForeignKey, Boolean, Text
 from sqlalchemy.orm import relationship
-from ..database import Base
+from app.database import Base
 from sqlalchemy import func
 
 class Notification(Base):

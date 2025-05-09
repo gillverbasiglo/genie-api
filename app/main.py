@@ -1,34 +1,27 @@
 import logging
-
 from cachetools import TTLCache
 from exa_py import Exa
-from fastapi import Depends, HTTPException, status, Response
+from fastapi import Depends, HTTPException, status
 from firebase_admin import auth
 from openai import AsyncOpenAI, OpenAIError
 from pydantic import BaseModel
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 from tavily import TavilyClient
 from typing import Optional, List, Literal
-from starlette.requests import Request
-import json
-
-from .common import app, get_current_user
-from .config import settings
-from .routers.google.places.endpoints import router as GooglePlacesEndpoints
-from .routers.trip_advisor.endpoints import router as TripAdvisorEndpoints
-from .routers.users.invitations.endpoints import router as InvitationsEndpoints
-from .routers.sharing.endpoints import router as SharingEndpoints
-from .routers.apple.endpoints import router as AppleSiteAssociationEndpoint
-from .routers.recommendations.endpoints import router as RecommendationsEndpoints
-from .routers.device_tokens.endpoints import router as DeviceTokenEndpoints
-from .routers.search import router as SearchEndpoints
-from .routers.users.friends.endpoints import router as FriendsEndpoints
-from .routers.users.user_and_contacts import router as UserAndContacts
+from app.common import app, get_current_user
+from app.config import settings
+from app.routers.google.places.endpoints import router as GooglePlacesEndpoints
+from app.routers.trip_advisor.endpoints import router as TripAdvisorEndpoints
+from app.routers.users.invitations.endpoints import router as InvitationsEndpoints
+from app.routers.sharing.endpoints import router as SharingEndpoints
+from app.routers.apple.endpoints import router as AppleSiteAssociationEndpoint
+from app.routers.recommendations.endpoints import router as RecommendationsEndpoints
+from app.routers.device_tokens.endpoints import router as DeviceTokenEndpoints
+from app.routers.search import router as SearchEndpoints
+from app.routers.users.friends.endpoints import router as FriendsEndpoints
+from app.routers.users.user_and_contacts import router as UserAndContacts
 from app.routers.websocket.endpoints import router as WebSocketEndpoints
 from app.routers.chat.endpoints import router as ChatEndPoints
-from .init_db import get_db
-from app.models import User
+from app.routers.notifications.endpoints import router as NotificationsEndpoints
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +41,7 @@ app.include_router(FriendsEndpoints)
 app.include_router(UserAndContacts)
 app.include_router(WebSocketEndpoints)
 app.include_router(ChatEndPoints)
+app.include_router(NotificationsEndpoints)
 
 # Global clients
 groq_client = AsyncOpenAI(

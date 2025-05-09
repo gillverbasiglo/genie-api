@@ -3,8 +3,8 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import uuid
 
-from ...database import Base
-from ...schemas.friends import FriendRequestStatus
+from app.database import Base
+from app.schemas.friends import FriendRequestStatus
 
 class FriendRequest(Base):
     __tablename__ = "friend_requests"
