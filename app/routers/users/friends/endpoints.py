@@ -19,7 +19,7 @@ from app.schemas.friends import (
     FriendRequestType,
     FriendRequestResponse
 )
-from app.services.friends_service import get_blocked_users, get_friend_requests, get_friend_status, get_friends, report_user, send_friend_request, unblock_user, update_friend_request_status
+from app.services.friends_service import get_blocked_users, get_friend_requests, get_friend_status, get_friends, report_user, send_friend_request, unblock_user, update_friend_request_status, remove_friend
 
 router = APIRouter(prefix="/friends", tags=["friends"])
 
@@ -124,7 +124,7 @@ async def get_friends_api(
     
 
 @router.delete("/{friend_id}")
-async def remove_friend(
+async def remove_friend_api(
     friend_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user)
