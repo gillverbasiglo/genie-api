@@ -16,6 +16,7 @@ from app.common import manager as WebSocketConnectManager
 from app.config import settings
 from app.services.user_service import get_user_by_id
 from sqlalchemy.orm import joinedload
+from app.services.shared_content_service import share_content, get_shared_posts, update_share_seen_status
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -111,7 +112,7 @@ async def send_push_notifications(device_tokens: List[DeviceToken], notification
     return push_responses
 
 @router.post("/recommendation", response_model=ShareResponse)
-async def share_content(
+async def share_content_endpoint(
     share_data: ShareCreate, 
     db: AsyncSession = Depends(get_db), 
     current_user: dict = Depends(get_current_user)
@@ -121,74 +122,38 @@ async def share_content(
     from_user = await get_user_by_id(db, current_user['uid'])
     to_user = await get_user_by_id(db, share_data.to_user_id)
 
-    if not from_user or not to_user:
-        logger.warning(f"User(s) not found: from_user={from_user}, to_user={to_user}")
-        raise HTTPException(status_code=404, detail="One or both users not found")
+    result = await share_content(share_data, from_user, to_user, db)
 
-    try:
-        # Create share entry
-        share = Share(
-            from_user_id=from_user.id,
-            to_user_id=to_user.id,
-            content_id=share_data.content_id,
-            content_type=share_data.content_type,
-            message=share_data.message
-        )
-        db.add(share)
-
-        # Create notification for the recipient
-        notification = Notification(
-            user_id=to_user.id,
-            type=NotificationType.SHARE,
-            title=share_data.title,
-            message=share_data.message,
-            data=json.dumps({
-                "content_id": share_data.content_id,
-                "content_type": share_data.content_type,
-                "from_user_id": from_user.id,
-                "share_id": share.id
-            }),
-            is_read=False
-        )
-        db.add(notification)
-
-        await db.commit()
-        await db.refresh(share)
-        await db.refresh(notification)
-
-        logger.info(f"Share created with ID: {share.id}")
-        logger.info(f"Notification created with ID: {notification.id}")
-
-    except Exception as e:
-        logger.exception("Failed to create share or notification.")
-        raise HTTPException(status_code=500, detail="Error creating share or notification")
-
-    # Fetch active iOS device tokens for the recipient
-    stmt = select(DeviceToken).where(
-        DeviceToken.is_active == True,
-        DeviceToken.user_id == to_user.id,
-        DeviceToken.platform == "ios"
+    return ShareResponse(
+        id=result["share"].id,
+        from_user_id=result["share"].from_user_id,
+        to_user_id=result["share"].to_user_id,
+        content_id=result["share"].content_id,
+        content_type=result["share"].content_type,
+        message=result["share"].message,
+        created_at=result["share"].created_at,
+        notification_responses=result["notification_responses"]
     )
-    device_tokens_result = await db.execute(stmt)
-    device_tokens = device_tokens_result.scalars().all()
 
-    if not device_tokens:
-        logger.info(f"No active iOS device tokens found for user {to_user.id}")
+@router.get("/list", response_model=List[ShareListResponse])
+async def get_shared_posts_endpoint(
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    shares = await get_shared_posts(current_user["uid"], db)
+    return shares
 
-    # Send push notifications
-    try:
-        notification_responses = await send_push_notifications(device_tokens, notification)
-        logger.info(f"Push notifications sent: {len(notification_responses)} responses")
-    except Exception as e:
-        logger.exception("Error while sending push notifications.")
-        notification_responses = []
-
-    # Map push notification responses to schema
-    notification_response_models = [
-        NotificationResponse(**response) for response in notification_responses
-    ]
-
-    # Construct final API response
+@router.patch("/{share_id}/seen", response_model=ShareResponse)
+async def mark_share_as_seen(
+    share_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Mark a share as seen by the recipient
+    """
+    share = await update_share_seen_status(share_id, current_user["uid"], db)
+    
     return ShareResponse(
         id=share.id,
         from_user_id=share.from_user_id,
@@ -196,24 +161,7 @@ async def share_content(
         content_id=share.content_id,
         content_type=share.content_type,
         message=share.message,
+        is_Seen=share.is_Seen, 
         created_at=share.created_at,
-        notification_responses=notification_response_models
+        notification_responses=[]  # No notifications for seen status update
     )
-
-
-
-@router.get("/list", response_model=List[ShareListResponse])
-async def get_shared_posts(
-    current_user: dict = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    # Get all pending invitations for these phone numbers
-    stmt = select(Share).where(
-        Share.to_user_id == current_user["uid"]
-    ).options(
-        joinedload(Share.from_user)
-    )
-    shares = await db.execute(stmt)
-    shares = shares.scalars().all()
-    
-    return shares
