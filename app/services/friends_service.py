@@ -473,7 +473,6 @@ async def get_friends(
     return friends
 
 
-
 async def remove_friend(
     friend_id: str, db: AsyncSession, current_user: dict
 ):
