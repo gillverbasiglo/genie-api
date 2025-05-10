@@ -41,6 +41,7 @@ class ShareResponse(ShareBase):
     from_user_id: str
     to_user_id: str
     created_at: datetime
+    is_Seen: bool
     notification_responses: List[NotificationResponse]
     
     class Config:
