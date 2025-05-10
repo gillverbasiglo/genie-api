@@ -29,6 +29,29 @@ async def send_friend_request(
     target_user = results.scalar_one_or_none()
     if not target_user:
         raise HTTPException(status_code=404, detail="User not found")
+    
+    target_user_dict = {
+        "id": target_user.id,
+        "phone_number": target_user.phone_number,
+        "email": target_user.email,
+        "display_name": target_user.display_name,
+        "created_at": target_user.created_at.isoformat() if target_user.created_at else None,
+    }
+
+    # Check if sender user exists
+    results = await db.execute(select(User).where(User.id == current_user['uid']))
+    sender_user = results.scalar_one_or_none()
+    if not sender_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    sender_user_dict = {
+        "id": sender_user.id,
+        "phone_number": sender_user.phone_number,
+        "email": sender_user.email,
+        "display_name": sender_user.display_name,
+        "created_at": sender_user.created_at.isoformat() if sender_user.created_at else None,
+        "updated_at": sender_user.updated_at.isoformat() if sender_user.updated_at else None,
+    }
 
     # Check if users are already friends
     stmt = select(Friend).where(
@@ -101,13 +124,19 @@ async def send_friend_request(
 
     # ✅ Send WebSocket notification if the user is connected
     try:
-        notification = {
+        # Prepare notification data within async context
+        notification_data = {
             "type": WebSocketMessageType.FRIEND_REQUEST,
-            "message": f"{current_user['uid']} sent you a friend request.",
-            "from_user_id": current_user['uid'],
-            "to_user_id": request.to_user_id
+            "message": f"{sender_user_dict['display_name'] or sender_user_dict['id']} sent you a friend request.",
+            "from_user": sender_user_dict,
+            "to_user": target_user_dict,
+            "status": "pending",
+            "created_at": friend_request.created_at.isoformat() if friend_request.created_at else None,
+            "updated_at": friend_request.updated_at.isoformat() if friend_request.updated_at else None,
         }
-        await manager.send_notification(request.to_user_id, json.dumps(notification))
+        # Convert to JSON string before sending
+        notification_json = json.dumps(notification_data)
+        await manager.send_notification(request.to_user_id, notification_json)
     except Exception as e:
         # Log it or silently continue
         logger.warning(f"Failed to send WebSocket notification: {e}")

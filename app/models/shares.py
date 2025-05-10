@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, DateTime, ForeignKey
+from sqlalchemy import Column, String, DateTime, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
 from ..database import Base
 from sqlalchemy import func
@@ -12,6 +12,7 @@ class Share(Base):
     to_user_id = Column(String, ForeignKey("users.id"))
     content_id = Column(String, index=True)
     content_type = Column(String)
+    is_Seen = Column(Boolean, default=False)
     message = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     

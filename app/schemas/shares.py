@@ -21,6 +21,7 @@ class ShareListResponse(BaseModel):
     created_at: datetime
     content_id: str
     content_type: str
+    is_Seen: bool
     message: Optional[str] = None
     title: Optional[str] = None
 
