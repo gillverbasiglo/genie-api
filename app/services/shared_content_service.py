@@ -157,6 +157,7 @@ async def share_content(
     try:
         # Prepare notification data within async context
         share_notification_data = {
+            "id": share.id,
             "type": WebSocketMessageType.FRIEND_REQUEST,
             "message": share_data.message,
             "from_user": {
