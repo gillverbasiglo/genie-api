@@ -1,21 +1,14 @@
 import logging
-import json
-import asyncio
 import httpx
 from typing import List, Dict, Any
-from pydantic import BaseModel
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from app.schemas.notifications import NotificationType
 from app.init_db import get_db
-from app.models import User, Share, Notification, DeviceToken
-from app.schemas.shares import ShareListResponse, ShareResponse, ShareCreate, NotificationResponse
+from app.models import Notification, DeviceToken
+from app.schemas.shares import ShareListResponse, ShareResponse, ShareCreate
 from app.common import get_current_user
-from app.common import manager as WebSocketConnectManager
 from app.config import settings
 from app.services.user_service import get_user_by_id
-from sqlalchemy.orm import joinedload
 from app.services.shared_content_service import share_content, get_shared_posts, update_share_seen_status
 
 # Configure logging
@@ -124,23 +117,27 @@ async def share_content_endpoint(
 
     result = await share_content(share_data, from_user, to_user, db)
 
-    return ShareResponse(
-        id=result["share"].id,
-        from_user_id=result["share"].from_user_id,
-        to_user_id=result["share"].to_user_id,
-        content_id=result["share"].content_id,
-        content_type=result["share"].content_type,
-        message=result["share"].message,
-        created_at=result["share"].created_at,
-        notification_responses=result["notification_responses"]
-    )
+    return result
 
 @router.get("/list", response_model=List[ShareListResponse])
 async def get_shared_posts_endpoint(
     current_user: dict = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    seen_status: str = Query(
+        default="all",
+        description="Filter shares by seen status",
+        enum=["all", "seen", "unseen"]
+    )
 ):
-    shares = await get_shared_posts(current_user["uid"], db)
+    """
+    Get all shared posts for the current user with optional seen status filter
+    
+    - **seen_status**: Filter shares by seen status
+        - "all": Get all shares (default)
+        - "seen": Get only seen shares
+        - "unseen": Get only unseen shares
+    """
+    shares = await get_shared_posts(current_user["uid"], db, seen_status)
     return shares
 
 @router.patch("/{share_id}/seen", response_model=ShareResponse)

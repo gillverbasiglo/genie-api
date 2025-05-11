@@ -126,6 +126,7 @@ async def send_friend_request(
     try:
         # Prepare notification data within async context
         notification_data = {
+            "id": friend_request.id,
             "type": WebSocketMessageType.FRIEND_REQUEST,
             "message": f"{sender_user_dict['display_name'] or sender_user_dict['id']} sent you a friend request.",
             "from_user": sender_user_dict,
@@ -285,7 +286,6 @@ async def update_friend_request_status(
 
     return response_data
 
-
 async def get_friend_status(
     user_id: str, db: AsyncSession, current_user: dict
 ):
@@ -346,7 +346,6 @@ async def get_friend_status(
         is_blocked_by=is_blocked_by,
         friend_request_id=friend_request.id if friend_request else None
     )
-
 
 async def block_user(
     block: UserBlockCreate, db: AsyncSession, current_user: dict
@@ -413,7 +412,6 @@ async def block_user(
 
     return user_block
 
-
 async def unblock_user(
     user_id: str, db: AsyncSession, current_user: dict
 ):
@@ -432,7 +430,6 @@ async def unblock_user(
     await db.commit()
 
     return {"message": "User unblocked successfully"}
-
 
 async def report_user(
     report: UserReportCreate, db: AsyncSession, current_user: dict
@@ -460,7 +457,6 @@ async def report_user(
 
     return user_report
 
-
 async def get_friends(
     db: AsyncSession, current_user: dict
 ):
@@ -472,7 +468,6 @@ async def get_friends(
     friends = friends.scalars().all()
     return friends
 
-
 async def remove_friend(
     friend_id: str, db: AsyncSession, current_user: dict
 ):
@@ -480,6 +475,16 @@ async def remove_friend(
     Remove a friend (bidirectional). Returns 404 if friendship doesn't exist.
     """
     uid = current_user['uid']
+
+    # Delete any pending friend requests between these users (in either direction)
+    await db.execute(
+        delete(FriendRequest).where(
+            or_(
+                and_(FriendRequest.from_user_id == uid, FriendRequest.to_user_id == friend_id),
+                and_(FriendRequest.from_user_id == friend_id, FriendRequest.to_user_id == uid)
+            )
+        )
+    )
 
     # Check if the friendship exists (in either direction)
     result = await db.execute(
@@ -509,7 +514,6 @@ async def remove_friend(
 
     return {"message": "Friend removed successfully"}
 
-
 async def get_blocked_users(
     db: AsyncSession, current_user: dict
 ):
@@ -522,7 +526,6 @@ async def get_blocked_users(
         select(UserBlock).where(UserBlock.blocker_id == current_user['uid'])
     )
     return result.scalars().all()
-
 
 async def are_friends(db: AsyncSession, user1_id: str, user2_id: str) -> bool:
     """
