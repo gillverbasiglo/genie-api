@@ -8,8 +8,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 from app.schemas.notifications import NotificationType
 from app.models import User, Share, Notification, DeviceToken
-from app.schemas.shares import ShareCreate, NotificationResponse
+from app.schemas.shares import ShareCreate, NotificationResponse, ShareResponse
 from app.config import settings
+from app.schemas.websocket import WebSocketMessageType
+from app.core.websocket.websocket_manager import manager
 
 logger = logging.getLogger(__name__)
 
@@ -150,6 +152,36 @@ async def share_content(
     except Exception as e:
         logger.exception("Failed to create share or notification.")
         raise HTTPException(status_code=500, detail="Error creating share or notification")
+    
+    # ✅ Send WebSocket notification if the user is connected
+    try:
+        # Prepare notification data within async context
+        share_notification_data = {
+            "type": WebSocketMessageType.FRIEND_REQUEST,
+            "message": share_data.message,
+            "from_user": {
+                "id": from_user.id,
+                "email": from_user.email,
+                "display_name": from_user.display_name,
+                "phone_number": from_user.phone_number
+            },
+            "content_type": share_data.content_type,
+            "content_id": share_data.content_id,
+            "to_user": {
+                "id": to_user.id,
+                "email": to_user.email,
+                "display_name": to_user.display_name,
+                "phone_number": to_user.phone_number
+            },
+            "created_at": share.created_at.isoformat() if share.created_at else None,
+        }
+        # Convert to JSON string before sending
+        notification_json = json.dumps(share_notification_data)
+        await manager.send_notification(to_user.id, notification_json)
+
+    except Exception as e:
+        # Log it or silently continue
+        logger.warning(f"Failed to send WebSocket share notification: {e}")
 
     # Fetch active iOS device tokens for the recipient
     stmt = select(DeviceToken).where(
@@ -176,23 +208,48 @@ async def share_content(
         NotificationResponse(**response) for response in notification_responses
     ]
 
-    return {
-        "share": share,
-        "notification_responses": notification_response_models
-    }
+    return ShareResponse(
+        id=share.id,
+        from_user_id=share.from_user_id,
+        to_user_id=share.to_user_id,
+        content_id=share.content_id,
+        content_type=share.content_type,
+        message=share.message,
+        is_Seen=share.is_Seen,
+        created_at=share.created_at,
+        notification_responses=notification_response_models
+    )
 
 async def get_shared_posts(
     current_user_id: str,
-    db: AsyncSession
+    db: AsyncSession,
+    seen_status: str = "all"  # "all", "seen", or "unseen"
 ):
     """
-    Get all shared posts for a user
+    Get all shared posts for a user with optional seen status filter
+    
+    Args:
+        current_user_id: ID of the current user
+        db: Database session
+        seen_status: Filter by seen status ("all", "seen", or "unseen")
+        
+    Returns:
+        List of Share objects matching the filter
     """
+    # Base query
     stmt = select(Share).where(
         Share.to_user_id == current_user_id
     ).options(
         joinedload(Share.from_user)
     )
+
+    # Add seen status filter if specified
+    if seen_status == "seen":
+        stmt = stmt.where(Share.is_Seen == True)
+    elif seen_status == "unseen":
+        stmt = stmt.where(Share.is_Seen == False)
+    # "all" doesn't need any additional filter
+
     shares = await db.execute(stmt)
     return shares.scalars().all()
 
