@@ -13,21 +13,14 @@ class ConnectionManager:
 
     async def connect(self, websocket: WebSocket, user_id: str):
         await websocket.accept()
-        if user_id not in self.active_connections:
-            self.active_connections[user_id] = []
-        self.active_connections[user_id].append(websocket)
+        self.active_connections[user_id] = websocket
         self.online_users.add(user_id)
 
     async def disconnect(self, websocket: WebSocket, user_id: str, reason: str = "Unknown"):
         logger.warning(f"Disconnecting user {user_id}. Reason: {reason}")
         if user_id in self.active_connections:
-            try:
-                self.active_connections[user_id].remove(websocket)
-            except ValueError:
-                pass
-            if not self.active_connections[user_id]:  # No more active connections
-                del self.active_connections[user_id]
-                self.online_users.discard(user_id)
+            del self.active_connections[user_id]
+        self.online_users.discard(user_id)
         try:
             if websocket.client_state.name == "CONNECTED":
                 await websocket.close()
@@ -45,15 +38,14 @@ class ConnectionManager:
 
     async def send_notification(self, user_id: str, message: dict):
         """Send a notification to the user over WebSocket."""
-        websockets = self.active_connections.get(user_id)
-        if websockets:
+        websocket = self.active_connections.get(user_id)
+        if websocket:
             #await websocket.send_json(message)
-            for ws in list(websockets):
-                try:
-                    await ws.send_json(message)
-                except Exception as e:
-                    logger.warning(f"WebSocket send failed for user {user_id}: {e}")
-                    await self.disconnect(ws, user_id, reason="send_json failed")
+            try:
+                await websocket.send_json(message)
+            except Exception as e:
+                logger.warning(f"WebSocket send failed for user {user_id}: {e}")
+                await self.disconnect(websocket, user_id, reason="send_json failed")
         else:
             logger.warning(f"No active WebSocket connection for user {user_id}")
     
