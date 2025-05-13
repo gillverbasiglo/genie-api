@@ -70,7 +70,8 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         return {
             "uid": "userID1001",
             "email": "dev@example.com",
-            "name": "Development User"
+            "name": "Development User",
+            "display_name": "Development User"
         }
 
     token = credentials.credentials

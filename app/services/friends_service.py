@@ -249,21 +249,21 @@ async def update_friend_request_status(
             if update.status == FriendRequestStatus.ACCEPTED:
                 notification = {
                     "type": WebSocketMessageType.FRIEND_REQUEST_ACCEPTED,
-                    "message": f"{current_user['name']} accepted your friend request.",
+                    "message": f"{friend_request.from_user_id} accepted your friend request.",
                     "from_user_id": current_user['uid'],
                     "to_user_id": friend_request.from_user_id
                 }
             elif update.status == FriendRequestStatus.REJECTED:
                 notification = {
                     "type": WebSocketMessageType.FRIEND_REQUEST_REJECTED,
-                    "message": f"{current_user['name']} rejected your friend request.",
+                    "message": f"{friend_request.from_user_id} rejected your friend request.",
                     "from_user_id": current_user['uid'],
                     "to_user_id": friend_request.from_user_id
                 }
             elif update.status == FriendRequestStatus.CANCELLED:
                 notification = {
                     "type": WebSocketMessageType.FRIEND_REQUEST_CANCELLED,
-                    "message": f"{current_user['name']} cancelled the friend request.",
+                    "message": f"{friend_request.from_user_id} cancelled the friend request.",
                     "from_user_id": current_user['uid'],
                     "to_user_id": friend_request.from_user_id
                 }
