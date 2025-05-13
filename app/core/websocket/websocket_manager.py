@@ -17,7 +17,7 @@ class ConnectionManager:
         self.online_users.add(user_id)
 
     async def disconnect(self, websocket: WebSocket, user_id: str, reason: str = "Unknown"):
-        logger.info(f"Disconnecting user {user_id}. Reason: {reason}")
+        logger.warning(f"Disconnecting user {user_id}. Reason: {reason}")
         if user_id in self.active_connections:
             del self.active_connections[user_id]
         self.online_users.discard(user_id)
