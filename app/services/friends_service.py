@@ -1,6 +1,5 @@
 import logging
 import json
-import asyncio
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_, delete
@@ -138,23 +137,9 @@ async def send_friend_request(
         }
         # Convert to JSON string before sending
         notification_json = json.dumps(notification_data)
-        
-        # Implement retry mechanism for WebSocket notifications
-        max_retries = 3
-        retry_delay = 1  # seconds
-        
-        for attempt in range(max_retries):
-            try:
-                await manager.send_notification(request.to_user_id, notification_json)
-                break  # Success, exit retry loop
-            except Exception as e:
-                if attempt == max_retries - 1:  # Last attempt
-                    logger.warning(f"Failed to send WebSocket notification after {max_retries} attempts: {e}")
-                else:
-                    logger.info(f"WebSocket notification attempt {attempt + 1} failed, retrying in {retry_delay}s...")
-                    await asyncio.sleep(retry_delay)
-                    retry_delay *= 2  # Exponential backoff
+        await manager.send_notification(request.to_user_id, notification_json)
     except Exception as e:
+        # Log it or silently continue
         logger.warning(f"Failed to send WebSocket notification: {e}")
 
     return friend_request
@@ -285,22 +270,8 @@ async def update_friend_request_status(
             else:
                 return  # Ignore any other status
             
-            # Implement retry mechanism for WebSocket notifications
-            max_retries = 3
-            retry_delay = 1  # seconds
-            notification_json = json.dumps(notification)
-            
-            for attempt in range(max_retries):
-                try:
-                    await manager.send_notification(friend_request.from_user_id, notification_json)
-                    break  # Success, exit retry loop
-                except Exception as e:
-                    if attempt == max_retries - 1:  # Last attempt
-                        logger.warning(f"Failed to send WebSocket notification after {max_retries} attempts: {e}")
-                    else:
-                        logger.info(f"WebSocket notification attempt {attempt + 1} failed, retrying in {retry_delay}s...")
-                        await asyncio.sleep(retry_delay)
-                        retry_delay *= 2  # Exponential backoff
+            # Send the notification to the 'from_user_id' of the friend request
+            await manager.send_notification(friend_request.from_user_id, json.dumps(notification))
         except Exception as e:
             logger.warning(f"Failed to send WebSocket notification: {e}")
     
