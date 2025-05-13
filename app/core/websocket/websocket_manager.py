@@ -16,11 +16,15 @@ class ConnectionManager:
         self.active_connections[user_id] = websocket
         self.online_users.add(user_id)
 
-    async def disconnect(self, websocket: WebSocket, user_id: str):
+    async def disconnect(self, websocket: WebSocket, user_id: str, reason: str = "Unknown"):
+        logger.info(f"Disconnecting user {user_id}. Reason: {reason}")
         if user_id in self.active_connections:
             del self.active_connections[user_id]
         self.online_users.discard(user_id)
-        await websocket.close()
+        try:
+            await websocket.close()
+        except Exception as e:
+            logger.warning(f"Failed to close WebSocket for user {user_id}: {e}")
         
     def is_user_online(self, user_id: str) -> bool:
         return user_id in self.online_users
@@ -35,15 +39,24 @@ class ConnectionManager:
         """Send a notification to the user over WebSocket."""
         websocket = self.active_connections.get(user_id)
         if websocket:
-            await websocket.send_json(message)
+            #await websocket.send_json(message)
+            try:
+                await websocket.send_json(message)
+            except Exception as e:
+                logger.warning(f"WebSocket send failed for user {user_id}: {e}")
+                await self.disconnect(websocket, user_id, reason="send_json failed")
         else:
             logger.warning(f"No active WebSocket connection for user {user_id}")
     
     async def send_personal_message(self, user_id: str, message: dict):
         websocket = self.active_connections.get(user_id)
         if websocket:
-            logger.info(f"Sending message to {user_id}: {message}")
-            await websocket.send_json(message)
+            #await websocket.send_json(message)
+            try:
+                await websocket.send_json(message)
+            except Exception as e:
+                logger.warning(f"WebSocket send failed for user {user_id}: {e}")
+                await self.disconnect(websocket, user_id, reason="send_json failed")
         else:
             logger.warning(f"No active WebSocket connection for user {user_id}")
     
