@@ -50,7 +50,7 @@ async def websocket_endpoint(
                 await message_handler.handle_message(message_data, user_id)
 
         except WebSocketDisconnect:
-            manager.disconnect(websocket, user_id)
+            await manager.disconnect(websocket, user_id)
             logger.info(f"User {user_id} disconnected from WebSocket")
 
     except Exception as e:
