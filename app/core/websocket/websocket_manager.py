@@ -22,7 +22,8 @@ class ConnectionManager:
             del self.active_connections[user_id]
         self.online_users.discard(user_id)
         try:
-            await websocket.close()
+            if websocket.client_state.name == "CONNECTED":
+                await websocket.close()
         except Exception as e:
             logger.warning(f"Failed to close WebSocket for user {user_id}: {e}")
         
