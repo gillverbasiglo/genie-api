@@ -257,16 +257,16 @@ async def update_friend_request_status(
 
 
     # Save in notification table
-    if update.status in [FriendRequestStatus.ACCEPTED]:
-        notification = Notification(
+    notification = Notification(
             user_id=friend_request.from_user_id,
             type=NotificationType.FRIEND_REQUEST,
             title="Friend request accepted.",
             message=f"{current_user['uid']} accepted your friend request."
         )
-        db.add(notification)
-        await db.commit()
-        await db.refresh(notification)
+    db.add(notification)
+    await db.commit()
+    await db.refresh(notification)
+        
 
     is_user_online = manager.is_user_online(friend_request.from_user_id)
     logger.info(f"Recipient user online: {is_user_online}")
