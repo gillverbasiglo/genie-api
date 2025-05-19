@@ -76,33 +76,6 @@ async def send_single_notification(device_token: str, notification: Notification
             "apns_unique_id": None
         }
 
-async def send_push_notifications(device_tokens: List[DeviceToken], notification: Notification) -> List[Dict[str, Any]]:
-    push_responses = []
-
-    for token_obj in device_tokens:
-        payload = {
-            "deviceToken": token_obj.token,
-            "message": notification.message,
-            "title": notification.title,
-            "badge": 1
-        }
-
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.post(f"{settings.push_notification_url.get_secret_value()}", json=payload)
-                push_responses.append({
-                    "device_token": token_obj.token,
-                    "status_code": response.status_code,
-                    "response": response.json() if response.status_code == 200 else response.text
-                })
-        except Exception as e:
-            push_responses.append({
-                "device_token": token_obj.token,
-                "status_code": 500,
-                "response": f"Error sending notification: {str(e)}"
-            })
-
-    return push_responses
 
 @router.post("/recommendation", response_model=ShareResponse)
 async def share_content_endpoint(
