@@ -141,8 +141,8 @@ async def send_friend_request(
                 "updated_at": friend_request.updated_at.isoformat() if friend_request.updated_at else None,
             }
             # Convert to JSON string before sending
-            notification_json = json.dumps(notification_data)
-            await manager.send_notification(request.to_user_id, notification_json)
+            #notification_json = json.dumps(notification_data)
+            await manager.send_notification(request.to_user_id, notification_data)
         except Exception as e:
             # Log it or silently continue
             logger.warning(f"Failed to send WebSocket notification: {e}")
@@ -281,6 +281,7 @@ async def update_friend_request_status(
                         "from_user_id": current_user['uid'],
                         "to_user_id": friend_request.from_user_id
                     }
+                    await manager.send_notification(friend_request.from_user_id, notification)
                 elif update.status == FriendRequestStatus.REJECTED:
                     notification = {
                         "type": WebSocketMessageType.FRIEND_REQUEST_REJECTED,
@@ -288,6 +289,7 @@ async def update_friend_request_status(
                         "from_user_id": current_user['uid'],
                         "to_user_id": friend_request.from_user_id
                     }
+                    await manager.send_notification(friend_request.from_user_id, notification)
                 elif update.status == FriendRequestStatus.CANCELLED:
                     notification = {
                         "type": WebSocketMessageType.FRIEND_REQUEST_CANCELLED,
@@ -295,11 +297,12 @@ async def update_friend_request_status(
                         "from_user_id": current_user['uid'],
                         "to_user_id": friend_request.from_user_id
                     }
+                    await manager.send_notification(friend_request.to_user_id, notification)
                 else:
                     return  # Ignore any other status
                 
                 # Send the notification to the 'from_user_id' of the friend request
-                await manager.send_notification(friend_request.from_user_id, json.dumps(notification))
+                #await manager.send_notification(friend_request.from_user_id, json.dumps(notification))
             except Exception as e:
                 logger.warning(f"Failed to send WebSocket notification: {e}")
     else:
