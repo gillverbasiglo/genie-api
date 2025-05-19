@@ -200,7 +200,7 @@ async def share_content(
     # Send push notifications
     try:
         notification_responses = await send_push_notifications(device_tokens, notification)
-        logger.info(f"Push notifications sent: {len(notification_responses)} responses")
+        logger.info(f"Push notifications sent: {notification_responses} responses")
     except Exception as e:
         logger.exception("Error while sending push notifications.")
         notification_responses = []

@@ -34,7 +34,8 @@ class ResponsePayload(BaseModel):
 class NotificationResponse(BaseModel):
     device_token: str
     status_code: int
-    response: ResponsePayload
+    response: Optional[ResponsePayload] = None
+    response: Optional[str] = None
 
 class ShareResponse(ShareBase):
     id: str
