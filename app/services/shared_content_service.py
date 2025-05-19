@@ -179,7 +179,7 @@ async def share_content(
         }
         # Convert to JSON string before sending
         notification_json = json.dumps(share_notification_data)
-        await manager.send_notification(to_user.id, notification_json)
+        await manager.send_notification(to_user.id, share_notification_data)
 
     except Exception as e:
         # Log it or silently continue
