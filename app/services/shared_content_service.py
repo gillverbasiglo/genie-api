@@ -84,6 +84,7 @@ async def send_push_notifications(device_tokens: List[DeviceToken], notification
             "title": notification.title,
             "badge": 1
         }
+        logger.info(f"Sending push notification to device {token_obj.token} with payload: {payload}")
 
         try:
             async with httpx.AsyncClient() as client:
@@ -158,7 +159,7 @@ async def share_content(
         # Prepare notification data within async context
         share_notification_data = {
             "id": share.id,
-            "type": WebSocketMessageType.FRIEND_REQUEST,
+            "type": WebSocketMessageType.SHARED_ITEM,
             "message": share_data.message,
             "from_user": {
                 "id": from_user.id,

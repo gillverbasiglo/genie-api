@@ -5,12 +5,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_, delete
 from sqlalchemy.orm import joinedload
 from app.models import User, FriendRequest, Friend, UserBlock, UserReport
+from app.models.device_token import DeviceToken
 from app.models.notifications import Notification
 from app.schemas.friends import FriendRequestCreate, FriendRequestType, FriendRequestUpdate, FriendRequestStatus
 from app.schemas.friends import FriendStatusResponse, UserBlockCreate, UserReportCreate
-from app.schemas.notifications import NotificationType
+from app.schemas.notifications import NotificationResponse, NotificationType
 from app.schemas.websocket import WebSocketMessageType
 from app.core.websocket.websocket_manager import manager
+from app.services.shared_content_service import send_push_notifications
 
 logger = logging.getLogger(__name__)
 
@@ -122,26 +124,49 @@ async def send_friend_request(
     await db.commit()
     await db.refresh(notification)
 
+    is_user_online = manager.is_user_online(request.to_user_id)
+    logger.info(f"Recipient user online: {is_user_online}")
     # ✅ Send WebSocket notification if the user is connected
-    try:
-        # Prepare notification data within async context
-        notification_data = {
-            "id": friend_request.id,
-            "type": WebSocketMessageType.FRIEND_REQUEST,
-            "message": f"{sender_user_dict['display_name'] or sender_user_dict['id']} sent you a friend request.",
-            "from_user": sender_user_dict,
-            "to_user": target_user_dict,
-            "status": "pending",
-            "created_at": friend_request.created_at.isoformat() if friend_request.created_at else None,
-            "updated_at": friend_request.updated_at.isoformat() if friend_request.updated_at else None,
-        }
-        # Convert to JSON string before sending
-        notification_json = json.dumps(notification_data)
-        await manager.send_notification(request.to_user_id, notification_json)
-    except Exception as e:
-        # Log it or silently continue
-        logger.warning(f"Failed to send WebSocket notification: {e}")
+    if (is_user_online):
+        try:
+            # Prepare notification data within async context
+            notification_data = {
+                "id": friend_request.id,
+                "type": WebSocketMessageType.FRIEND_REQUEST,
+                "message": f"{sender_user_dict['display_name'] or sender_user_dict['id']} sent you a friend request.",
+                "from_user": sender_user_dict,
+                "to_user": target_user_dict,
+                "status": "pending",
+                "created_at": friend_request.created_at.isoformat() if friend_request.created_at else None,
+                "updated_at": friend_request.updated_at.isoformat() if friend_request.updated_at else None,
+            }
+            # Convert to JSON string before sending
+            notification_json = json.dumps(notification_data)
+            await manager.send_notification(request.to_user_id, notification_json)
+        except Exception as e:
+            # Log it or silently continue
+            logger.warning(f"Failed to send WebSocket notification: {e}")
+    else:
+        # Fetch active iOS device tokens for the recipient
+        stmt = select(DeviceToken).where(
+            DeviceToken.is_active == True,
+            DeviceToken.user_id == request.to_user_id,
+            DeviceToken.platform == "ios"
+        )
+        device_tokens_result = await db.execute(stmt)
+        device_tokens = device_tokens_result.scalars().all()
 
+        if not device_tokens:
+            logger.info(f"No active iOS device tokens found for user {request.to_user_id}")
+
+        # Send push notifications
+        try:
+            notification_responses = await send_push_notifications(device_tokens, notification)
+            logger.info(f"Push notifications sent: {notification_responses} responses")
+        except Exception as e:
+            logger.exception("Error while sending push notifications.")
+
+        
     return friend_request
 
 async def get_friend_requests(
@@ -243,37 +268,60 @@ async def update_friend_request_status(
         await db.commit()
         await db.refresh(notification)
 
+    is_user_online = manager.is_user_online(friend_request.from_user_id)
+    logger.info(f"Recipient user online: {is_user_online}")
     # ✅ Send WebSocket notification on ACCEPTED or REJECTED
-    if update.status in [FriendRequestStatus.ACCEPTED, FriendRequestStatus.REJECTED, FriendRequestStatus.CANCELLED]:
+    if (is_user_online):
+        if update.status in [FriendRequestStatus.ACCEPTED, FriendRequestStatus.REJECTED, FriendRequestStatus.CANCELLED]:
+            try:
+                if update.status == FriendRequestStatus.ACCEPTED:
+                    notification = {
+                        "type": WebSocketMessageType.FRIEND_REQUEST_ACCEPTED,
+                        "message": f"{friend_request.from_user_id} accepted your friend request.",
+                        "from_user_id": current_user['uid'],
+                        "to_user_id": friend_request.from_user_id
+                    }
+                elif update.status == FriendRequestStatus.REJECTED:
+                    notification = {
+                        "type": WebSocketMessageType.FRIEND_REQUEST_REJECTED,
+                        "message": f"{friend_request.from_user_id} rejected your friend request.",
+                        "from_user_id": current_user['uid'],
+                        "to_user_id": friend_request.from_user_id
+                    }
+                elif update.status == FriendRequestStatus.CANCELLED:
+                    notification = {
+                        "type": WebSocketMessageType.FRIEND_REQUEST_CANCELLED,
+                        "message": f"{friend_request.from_user_id} cancelled the friend request.",
+                        "from_user_id": current_user['uid'],
+                        "to_user_id": friend_request.from_user_id
+                    }
+                else:
+                    return  # Ignore any other status
+                
+                # Send the notification to the 'from_user_id' of the friend request
+                await manager.send_notification(friend_request.from_user_id, json.dumps(notification))
+            except Exception as e:
+                logger.warning(f"Failed to send WebSocket notification: {e}")
+    else:
+        # Fetch active iOS device tokens for the recipient
+        stmt = select(DeviceToken).where(
+            DeviceToken.is_active == True,
+            DeviceToken.user_id == friend_request.from_user_id,
+            DeviceToken.platform == "ios"
+        )
+        device_tokens_result = await db.execute(stmt)
+        device_tokens = device_tokens_result.scalars().all()
+
+        if not device_tokens:
+            logger.info(f"No active iOS device tokens found for user {friend_request.from_user_id}")
+
+        # Send push notifications
         try:
-            if update.status == FriendRequestStatus.ACCEPTED:
-                notification = {
-                    "type": WebSocketMessageType.FRIEND_REQUEST_ACCEPTED,
-                    "message": f"{friend_request.from_user_id} accepted your friend request.",
-                    "from_user_id": current_user['uid'],
-                    "to_user_id": friend_request.from_user_id
-                }
-            elif update.status == FriendRequestStatus.REJECTED:
-                notification = {
-                    "type": WebSocketMessageType.FRIEND_REQUEST_REJECTED,
-                    "message": f"{friend_request.from_user_id} rejected your friend request.",
-                    "from_user_id": current_user['uid'],
-                    "to_user_id": friend_request.from_user_id
-                }
-            elif update.status == FriendRequestStatus.CANCELLED:
-                notification = {
-                    "type": WebSocketMessageType.FRIEND_REQUEST_CANCELLED,
-                    "message": f"{friend_request.from_user_id} cancelled the friend request.",
-                    "from_user_id": current_user['uid'],
-                    "to_user_id": friend_request.from_user_id
-                }
-            else:
-                return  # Ignore any other status
-            
-            # Send the notification to the 'from_user_id' of the friend request
-            await manager.send_notification(friend_request.from_user_id, json.dumps(notification))
+            notification_responses = await send_push_notifications(device_tokens, notification)
+            logger.info(f"Push notifications sent: {len(notification_responses)} responses")
         except Exception as e:
-            logger.warning(f"Failed to send WebSocket notification: {e}")
+            logger.exception("Error while sending push notifications.")
+            notification_responses = []
     
     response_data = {
         "id": friend_request.id,
