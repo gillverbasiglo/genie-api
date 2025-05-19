@@ -136,7 +136,7 @@ async def send_friend_request(
                 "message": f"{sender_user_dict['display_name'] or sender_user_dict['id']} sent you a friend request.",
                 "from_user": sender_user_dict,
                 "to_user": target_user_dict,
-                "status": "pending",
+                "status": "PENDING",
                 "created_at": friend_request.created_at.isoformat() if friend_request.created_at else None,
                 "updated_at": friend_request.updated_at.isoformat() if friend_request.updated_at else None,
             }
@@ -276,26 +276,38 @@ async def update_friend_request_status(
             try:
                 if update.status == FriendRequestStatus.ACCEPTED:
                     notification = {
+                        "id": friend_request.id,
                         "type": WebSocketMessageType.FRIEND_REQUEST_ACCEPTED,
                         "message": f"{friend_request.from_user_id} accepted your friend request.",
                         "from_user_id": current_user['uid'],
-                        "to_user_id": friend_request.from_user_id
+                        "to_user_id": friend_request.from_user_id,
+                        "status": "ACCEPTED",
+                        "created_at": friend_request.created_at.isoformat() if friend_request.created_at else None,
+                        "updated_at": friend_request.updated_at.isoformat() if friend_request.updated_at else None
                     }
                     await manager.send_notification(friend_request.from_user_id, notification)
                 elif update.status == FriendRequestStatus.REJECTED:
                     notification = {
+                        "id": friend_request.id,
                         "type": WebSocketMessageType.FRIEND_REQUEST_REJECTED,
                         "message": f"{friend_request.from_user_id} rejected your friend request.",
                         "from_user_id": current_user['uid'],
-                        "to_user_id": friend_request.from_user_id
+                        "to_user_id": friend_request.from_user_id,
+                        "status": "REJECTED",
+                        "created_at": friend_request.created_at.isoformat() if friend_request.created_at else None,
+                        "updated_at": friend_request.updated_at.isoformat() if friend_request.updated_at else None
                     }
                     await manager.send_notification(friend_request.from_user_id, notification)
                 elif update.status == FriendRequestStatus.CANCELLED:
                     notification = {
+                        "id": friend_request.id,
                         "type": WebSocketMessageType.FRIEND_REQUEST_CANCELLED,
                         "message": f"{friend_request.from_user_id} cancelled the friend request.",
                         "from_user_id": current_user['uid'],
-                        "to_user_id": friend_request.from_user_id
+                        "to_user_id": friend_request.from_user_id,
+                        "status": "CANCELLED",
+                        "created_at": friend_request.created_at.isoformat() if friend_request.created_at else None,
+                        "updated_at": friend_request.updated_at.isoformat() if friend_request.updated_at else None
                     }
                     await manager.send_notification(friend_request.to_user_id, notification)
                 else:
