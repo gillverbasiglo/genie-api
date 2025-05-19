@@ -88,7 +88,7 @@ async def send_push_notifications(device_tokens: List[DeviceToken], notification
 
         try:
             async with httpx.AsyncClient() as client:
-                response = await client.post(f"{settings.push_notification_url.get_secret_value()}", json=payload)
+                response = await client.post("localhost:3000/api/push-http", json=payload)
                 push_responses.append({
                     "device_token": token_obj.token,
                     "status_code": response.status_code,
