@@ -12,7 +12,7 @@ class ConnectionManager:
         self.active_connections: Dict[str, List[WebSocket]] = {}
         self.online_users = set()
         self.heartbeat_tasks: Dict[str, asyncio.Task] = {}
-        self.HEARTBEAT_INTERVAL = 30  # seconds
+        self.HEARTBEAT_INTERVAL = 144000  # seconds
         self.HEARTBEAT_TIMEOUT = 10   # seconds
 
     async def connect(self, websocket: WebSocket, user_id: str):

@@ -11,7 +11,7 @@ class WebSocketMessageType(str, Enum):
     PRIVATE_CHAT_MESSAGE = "newChatMessage"
     MESSAGE_UPDATE = "messageUpdate"
     TYPING_STATUS = "typingStatus"
-    SHARED_ITEM = "sharedItem"
+    SHARED_ITEM = "SHARED_ITEM"
     USER_STATUS = "userStatus"
     USER_ACTIVITY = "userActivity"
 
