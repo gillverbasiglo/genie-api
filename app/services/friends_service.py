@@ -317,8 +317,8 @@ async def update_friend_request_status(
                         "id": friend_request.id,
                         "type": WebSocketMessageType.FRIEND_REQUEST_ACCEPTED,
                         "message": f"{friend_request.from_user_id} accepted your friend request.",
-                        "from_user_id": sender_user_dict,
-                        "to_user_id": target_user_dict,
+                        "from_user": sender_user_dict,
+                        "to_user": target_user_dict,
                         "status": "ACCEPTED",
                         "created_at": friend_request.created_at.isoformat() if friend_request.created_at else None,
                         "updated_at": friend_request.updated_at.isoformat() if friend_request.updated_at else None
@@ -329,8 +329,8 @@ async def update_friend_request_status(
                         "id": friend_request.id,
                         "type": WebSocketMessageType.FRIEND_REQUEST_REJECTED,
                         "message": f"{friend_request.from_user_id} rejected your friend request.",
-                        "from_user_id": sender_user_dict,
-                        "to_user_id": target_user_dict,
+                        "from_user": sender_user_dict,
+                        "to_user": target_user_dict,
                         "status": "REJECTED",
                         "created_at": friend_request.created_at.isoformat() if friend_request.created_at else None,
                         "updated_at": friend_request.updated_at.isoformat() if friend_request.updated_at else None
@@ -341,8 +341,8 @@ async def update_friend_request_status(
                         "id": friend_request.id,
                         "type": WebSocketMessageType.FRIEND_REQUEST_CANCELLED,
                         "message": f"{friend_request.from_user_id} cancelled the friend request.",
-                        "from_user_id": sender_user_dict,
-                        "to_user_id": target_user_dict,
+                        "from_user": sender_user_dict,
+                        "to_user": target_user_dict,
                         "status": "CANCELLED",
                         "created_at": friend_request.created_at.isoformat() if friend_request.created_at else None,
                         "updated_at": friend_request.updated_at.isoformat() if friend_request.updated_at else None
