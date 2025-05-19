@@ -212,6 +212,7 @@ async def get_friend_requests(
 async def update_friend_request_status(
     request_id: str, update: FriendRequestUpdate, db: AsyncSession, current_user: dict
 ):
+    
     # Fetch friend request
     result = await db.execute(
         select(FriendRequest).where(
@@ -219,6 +220,43 @@ async def update_friend_request_status(
             )
     )
     friend_request = result.scalar_one_or_none()
+    
+    # Check if target user exists
+    results = await db.execute(select(User).where(User.id == friend_request.to_user_id))
+    target_user = results.scalar_one_or_none()
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    target_user_dict = {
+        "id": target_user.id,
+        "phone_number": target_user.phone_number,
+        "email": target_user.email,
+        "display_name": target_user.display_name,
+        "created_at": target_user.created_at.isoformat() if target_user.created_at else None,
+    }
+
+    # Check if sender user exists
+    results = await db.execute(select(User).where(User.id == current_user['uid']))
+    sender_user = results.scalar_one_or_none()
+    if not sender_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    sender_user_dict = {
+        "id": sender_user.id,
+        "phone_number": sender_user.phone_number,
+        "email": sender_user.email,
+        "display_name": sender_user.display_name,
+        "created_at": sender_user.created_at.isoformat() if sender_user.created_at else None,
+        "updated_at": sender_user.updated_at.isoformat() if sender_user.updated_at else None,
+    }
+
+    # Check if users are already friends
+    stmt = select(Friend).where(
+        or_(
+            and_(Friend.user_id == current_user['uid'], Friend.friend_id == friend_request.to_user_id),
+            and_(Friend.user_id == friend_request.to_user_id, Friend.friend_id == current_user['uid'])
+        )
+    )
 
     # Check if friend request exists    
     if not friend_request:
@@ -279,8 +317,8 @@ async def update_friend_request_status(
                         "id": friend_request.id,
                         "type": WebSocketMessageType.FRIEND_REQUEST_ACCEPTED,
                         "message": f"{friend_request.from_user_id} accepted your friend request.",
-                        "from_user_id": current_user['uid'],
-                        "to_user_id": friend_request.from_user_id,
+                        "from_user_id": sender_user_dict,
+                        "to_user_id": target_user_dict,
                         "status": "ACCEPTED",
                         "created_at": friend_request.created_at.isoformat() if friend_request.created_at else None,
                         "updated_at": friend_request.updated_at.isoformat() if friend_request.updated_at else None
@@ -291,8 +329,8 @@ async def update_friend_request_status(
                         "id": friend_request.id,
                         "type": WebSocketMessageType.FRIEND_REQUEST_REJECTED,
                         "message": f"{friend_request.from_user_id} rejected your friend request.",
-                        "from_user_id": current_user['uid'],
-                        "to_user_id": friend_request.from_user_id,
+                        "from_user_id": sender_user_dict,
+                        "to_user_id": target_user_dict,
                         "status": "REJECTED",
                         "created_at": friend_request.created_at.isoformat() if friend_request.created_at else None,
                         "updated_at": friend_request.updated_at.isoformat() if friend_request.updated_at else None
@@ -303,8 +341,8 @@ async def update_friend_request_status(
                         "id": friend_request.id,
                         "type": WebSocketMessageType.FRIEND_REQUEST_CANCELLED,
                         "message": f"{friend_request.from_user_id} cancelled the friend request.",
-                        "from_user_id": current_user['uid'],
-                        "to_user_id": friend_request.from_user_id,
+                        "from_user_id": sender_user_dict,
+                        "to_user_id": target_user_dict,
                         "status": "CANCELLED",
                         "created_at": friend_request.created_at.isoformat() if friend_request.created_at else None,
                         "updated_at": friend_request.updated_at.isoformat() if friend_request.updated_at else None
