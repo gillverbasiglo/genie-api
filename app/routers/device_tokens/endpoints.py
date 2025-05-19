@@ -28,7 +28,8 @@ async def register_device_token(
             DeviceToken.user_id == current_user["uid"],
             DeviceToken.token == device_token_data.token
         )
-        existing_token = await db.execute(stmt).scalar_one_or_none()
+        existing_token = await db.execute(stmt)
+        existing_token = existing_token.scalar_one_or_none()
         if existing_token:
             # Update existing token if it was deactivated
             if not existing_token.is_active:
