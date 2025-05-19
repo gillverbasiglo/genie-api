@@ -35,7 +35,7 @@ class NotificationResponse(BaseModel):
     device_token: str
     status_code: int
     response: Optional[ResponsePayload] = None
-    response: Optional[str] = None
+    error: Optional[str] = None
 
 class ShareResponse(ShareBase):
     id: str
