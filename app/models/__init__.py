@@ -8,5 +8,6 @@ from .friends.friends import Friend
 from .friends.friend_requests import FriendRequest
 from .friends.user_blocks import UserBlock
 from .friends.user_reports import UserReport
+from .recommendations import Recommendation, UserRecommendation
 
-__all__ = ["InvitationCode", "Invitation", "User", "DeviceToken", "Notification", "Share", "FriendRequest", "Friend", "UserBlock", "UserReport"]
+__all__ = ["InvitationCode", "Invitation", "User", "DeviceToken", "Notification", "Share", "FriendRequest", "Friend", "UserBlock", "UserReport", "Recommendation", "UserRecommendation"]
