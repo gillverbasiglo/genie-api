@@ -1,8 +1,8 @@
-from typing import List
 import uuid
 import random
 import string
 import logging
+from typing import List
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, select
@@ -14,13 +14,35 @@ from datetime import datetime
 # Configure logging
 logger = logging.getLogger(__name__)
 
-def generate_invite_code(length=6):
+def generate_invite_code(length=6) -> str:
+    """
+    Generates a random invitation code of specified length.
+    
+    Args:
+        length (int): Length of the invitation code (default: 6)
+    
+    Returns:
+        str: Random invitation code containing uppercase letters and digits
+    """
     # Create a pool of characters (uppercase letters and digits)
     characters = string.ascii_uppercase + string.digits
     # Generate a random code of specified length
     return ''.join(random.choice(characters) for _ in range(length))
 
-async def validate_code(code: str, db: AsyncSession):
+async def validate_code(code: str, db: AsyncSession) -> dict:
+    """
+    Validates an invitation code by checking its existence, usage status, expiration, and active status.
+    
+    Args:
+        code (str): The invitation code to validate
+        db (AsyncSession): Database session
+    
+    Returns:
+        dict: Message indicating code validity
+    
+    Raises:
+        HTTPException: If code is invalid, used, expired, or inactive
+    """
     db_code = db.query(InvitationCode).filter(InvitationCode.code == code).first()
     if not db_code:
         raise HTTPException(status_code=404, detail="Invite Code not found")
@@ -32,7 +54,20 @@ async def validate_code(code: str, db: AsyncSession):
         raise HTTPException(status_code=400, detail="Invite Code is not active")
     return {"message": "Invite Code is valid"}
 
-async def create_invite_code(invite_code: InviteCodeCreate, db: AsyncSession):
+async def create_invite_code(invite_code: InviteCodeCreate, db: AsyncSession) -> dict:
+    """
+    Creates a new invitation code in the database.
+    
+    Args:
+        invite_code (InviteCodeCreate): Invitation code creation data
+        db (AsyncSession): Database session
+    
+    Returns:
+        dict: Success message and created code
+    
+    Raises:
+        HTTPException: If code already exists
+    """
     db_code = db.query(InvitationCode).filter(InvitationCode.code == invite_code.code).first()
     if db_code:
         raise HTTPException(status_code=400, detail="Invitation code already exists")
@@ -49,7 +84,21 @@ async def create_invite_code(invite_code: InviteCodeCreate, db: AsyncSession):
 
     return {"message": "Invitation code created successfully", "code": new_code.code}
 
-async def send_invitation(invitation_data: BulkInvitationCreate, current_user: dict, db: AsyncSession):
+async def send_invitation(invitation_data: BulkInvitationCreate, current_user: dict, db: AsyncSession) -> List[Invitation]:
+    """
+    Sends bulk invitations to multiple users.
+    
+    Args:
+        invitation_data (BulkInvitationCreate): Bulk invitation data containing invitee details
+        current_user (dict): Current user information
+        db (AsyncSession): Database session
+    
+    Returns:
+        List[Invitation]: List of created invitations
+    
+    Raises:
+        HTTPException: If inviter user not found
+    """
     # Check if user exists
     stmt = select(User).where(User.id == current_user["uid"])
     inviter = db.execute(stmt).scalar_one_or_none()
@@ -96,7 +145,17 @@ async def send_invitation(invitation_data: BulkInvitationCreate, current_user: d
     
     return new_invitations
 
-async def get_invitation_stats(current_user: dict, db: AsyncSession):
+async def get_invitation_stats(current_user: dict, db: AsyncSession) -> dict:
+    """
+    Retrieves invitation statistics for the current user.
+    
+    Args:
+        current_user (dict): Current user information
+        db (AsyncSession): Database session
+    
+    Returns:
+        dict: Statistics containing total and accepted invitations
+    """
     # Get total invitations sent
     stmt = select(func.count()).select_from(Invitation).where(Invitation.inviter_id == current_user["uid"])
     total_invites = db.execute(stmt).scalar_one()
@@ -113,7 +172,18 @@ async def get_invitation_stats(current_user: dict, db: AsyncSession):
         "accepted_invites": accepted_invites
     }
 
-async def get_pending_invitations(phone_numbers: List[str], current_user: dict, db: AsyncSession):
+async def get_pending_invitations(phone_numbers: List[str], current_user: dict, db: AsyncSession) -> List[PendingInvitationResponse]:
+    """
+    Retrieves pending invitations for specified phone numbers.
+    
+    Args:
+        phone_numbers (List[str]): List of phone numbers to check
+        current_user (dict): Current user information
+        db (AsyncSession): Database session
+    
+    Returns:
+        List[PendingInvitationResponse]: List of pending invitations with their details
+    """
     # Get all pending invitations for these phone numbers
     stmt = select(Invitation).where(
         Invitation.inviter_id == current_user["uid"],
