@@ -14,24 +14,37 @@ from app.schemas.websocket import WebSocketMessageType
 from app.core.websocket.websocket_manager import manager
 from app.services.shared_content_service import send_push_notifications
 
+# Configure logging for this module
 logger = logging.getLogger(__name__)
 
 async def send_friend_request(
     request: FriendRequestCreate, db: AsyncSession, current_user: dict
 ):
     """
-    Send a friend request to another user
+    Send a friend request to another user.
+    
+    Args:
+        request: FriendRequestCreate object containing the target user ID
+        db: AsyncSession for database operations
+        current_user: Dictionary containing current user information
+        
+    Returns:
+        FriendRequest: The created friend request object
+        
+    Raises:
+        HTTPException: If users are already friends, request exists, or user is blocked
     """
-
+    # Prevent self-friending
     if current_user["uid"] == request.to_user_id:
         raise HTTPException(status_code=400, detail="I know you're awesome but you can't be friend with yourself.")
     
-    # Check if target user exists
+    # Verify target user exists
     results = await db.execute(select(User).where(User.id == request.to_user_id))
     target_user = results.scalar_one_or_none()
     if not target_user:
         raise HTTPException(status_code=404, detail="User not found")
     
+    # Prepare target user data for notifications
     target_user_dict = {
         "id": target_user.id,
         "phone_number": target_user.phone_number,
@@ -40,12 +53,13 @@ async def send_friend_request(
         "created_at": target_user.created_at.isoformat() if target_user.created_at else None,
     }
 
-    # Check if sender user exists
+    # Verify sender user exists
     results = await db.execute(select(User).where(User.id == current_user['uid']))
     sender_user = results.scalar_one_or_none()
     if not sender_user:
         raise HTTPException(status_code=404, detail="User not found")
     
+    # Prepare sender user data for notifications
     sender_user_dict = {
         "id": sender_user.id,
         "phone_number": sender_user.phone_number,
@@ -55,7 +69,7 @@ async def send_friend_request(
         "updated_at": sender_user.updated_at.isoformat() if sender_user.updated_at else None,
     }
 
-    # Check if users are already friends
+    # Check for existing friendship
     stmt = select(Friend).where(
         or_(
             and_(Friend.user_id == current_user['uid'], Friend.friend_id == request.to_user_id),
@@ -68,7 +82,7 @@ async def send_friend_request(
     if existing_friend:
         raise HTTPException(status_code=400, detail="Users are already friends")
 
-    # Check for existing friend request
+    # Check for existing pending friend request
     results = await db.execute(
         select(FriendRequest).where(
             or_(
@@ -90,7 +104,7 @@ async def send_friend_request(
     if existing_request:
         raise HTTPException(status_code=400, detail="Friend request already exists")
 
-    # Check if either user has blocked the other
+    # Check for existing blocks between users
     block_exists = await db.execute(
         select(UserBlock).where(
             or_(
@@ -103,7 +117,7 @@ async def send_friend_request(
     if block_exists:
         raise HTTPException(status_code=400, detail="Cannot send friend request to blocked user")
 
-    # Create new friend request
+    # Create and save new friend request
     friend_request = FriendRequest(
         from_user_id=current_user['uid'],
         to_user_id=request.to_user_id,
@@ -113,7 +127,7 @@ async def send_friend_request(
     await db.commit()
     await db.refresh(friend_request)
 
-    # Save in notification table
+    # Create notification for the recipient
     notification = Notification(
         user_id=request.to_user_id,
         type=NotificationType.FRIEND_REQUEST,
@@ -124,12 +138,13 @@ async def send_friend_request(
     await db.commit()
     await db.refresh(notification)
 
+    # Handle real-time notification delivery
     is_user_online = manager.is_user_online(request.to_user_id)
     logger.info(f"Recipient user online: {is_user_online}")
-    # ✅ Send WebSocket notification if the user is connected
-    if (is_user_online):
+    
+    if is_user_online:
+        # Send WebSocket notification for online users
         try:
-            # Prepare notification data within async context
             notification_data = {
                 "id": friend_request.id,
                 "type": WebSocketMessageType.FRIEND_REQUEST,
@@ -140,14 +155,11 @@ async def send_friend_request(
                 "created_at": friend_request.created_at.isoformat() if friend_request.created_at else None,
                 "updated_at": friend_request.updated_at.isoformat() if friend_request.updated_at else None,
             }
-            # Convert to JSON string before sending
-            #notification_json = json.dumps(notification_data)
             await manager.send_notification(request.to_user_id, notification_data)
         except Exception as e:
-            # Log it or silently continue
             logger.warning(f"Failed to send WebSocket notification: {e}")
     else:
-        # Fetch active iOS device tokens for the recipient
+        # Send push notification for offline users
         stmt = select(DeviceToken).where(
             DeviceToken.is_active == True,
             DeviceToken.user_id == request.to_user_id,
@@ -159,19 +171,28 @@ async def send_friend_request(
         if not device_tokens:
             logger.info(f"No active iOS device tokens found for user {request.to_user_id}")
 
-        # Send push notifications
         try:
             notification_responses = await send_push_notifications(device_tokens, notification)
             logger.info(f"Push notifications sent: {notification_responses} responses")
         except Exception as e:
             logger.exception("Error while sending push notifications.")
-
         
     return friend_request
 
 async def get_friend_requests(
     request_type: FriendRequestType, db: AsyncSession, current_user: dict
 ):
+    """
+    Retrieve friend requests based on the specified type (sent, received, or all).
+    
+    Args:
+        request_type: Type of friend requests to retrieve (SENT, RECEIVED, or ALL)
+        db: AsyncSession for database operations
+        current_user: Dictionary containing current user information
+        
+    Returns:
+        List[FriendRequest]: List of friend requests matching the criteria
+    """
     query = select(FriendRequest).options(
         joinedload(FriendRequest.from_user),
         joinedload(FriendRequest.to_user)
@@ -212,8 +233,22 @@ async def get_friend_requests(
 async def update_friend_request_status(
     request_id: str, update: FriendRequestUpdate, db: AsyncSession, current_user: dict
 ):
+    """
+    Update the status of a friend request (accept, reject, or cancel).
     
-    # Fetch friend request
+    Args:
+        request_id: ID of the friend request to update
+        update: FriendRequestUpdate object containing the new status
+        db: AsyncSession for database operations
+        current_user: Dictionary containing current user information
+        
+    Returns:
+        dict: Updated friend request data
+        
+    Raises:
+        HTTPException: If request not found, invalid status, or unauthorized
+    """
+    # Fetch and validate friend request
     result = await db.execute(
         select(FriendRequest).where(
             FriendRequest.id == request_id
@@ -221,12 +256,13 @@ async def update_friend_request_status(
     )
     friend_request = result.scalar_one_or_none()
     
-    # Check if target user exists
+    # Verify target user exists
     results = await db.execute(select(User).where(User.id == friend_request.to_user_id))
     target_user = results.scalar_one_or_none()
     if not target_user:
         raise HTTPException(status_code=404, detail="User not found")
     
+    # Prepare user data for notifications
     target_user_dict = {
         "id": target_user.id,
         "phone_number": target_user.phone_number,
@@ -235,7 +271,7 @@ async def update_friend_request_status(
         "created_at": target_user.created_at.isoformat() if target_user.created_at else None,
     }
 
-    # Check if sender user exists
+    # Verify sender user exists
     results = await db.execute(select(User).where(User.id == current_user['uid']))
     sender_user = results.scalar_one_or_none()
     if not sender_user:
@@ -261,24 +297,22 @@ async def update_friend_request_status(
     # Check if friend request exists    
     if not friend_request:
         raise HTTPException(status_code=404, detail="Friend request not found")
-
-    # Check if friend request is pending
     if friend_request.status != FriendRequestStatus.PENDING:
         raise HTTPException(status_code=400, detail="Friend request is not pending")
 
-    # Authorization checks
+    # Verify user has permission to update request
     if update.status == FriendRequestStatus.CANCELLED and friend_request.from_user_id != current_user['uid']:
         raise HTTPException(status_code=403, detail="Only the sender can cancel the request")
     if update.status in [FriendRequestStatus.ACCEPTED, FriendRequestStatus.REJECTED] and friend_request.to_user_id != current_user['uid']:
         raise HTTPException(status_code=403, detail="Only the recipient can accept or reject the request")
 
+    # Update request status
     friend_request.status = update.status
     await db.commit()
     await db.refresh(friend_request)
 
-    # If request is accepted, create friend relationship
+    # Create friendship if request is accepted
     if update.status == FriendRequestStatus.ACCEPTED:
-        # Check if friendship already exists
         existing = await db.execute(
             select(Friend).where(
                 (Friend.user_id == friend_request.from_user_id) &
@@ -292,9 +326,7 @@ async def update_friend_request_status(
             await db.commit()
         await db.refresh(friend_request)
 
-
-
-    # Save in notification table
+    # Create notification for status update
     notification = Notification(
             user_id=friend_request.from_user_id,
             type=NotificationType.FRIEND_REQUEST,
@@ -304,12 +336,13 @@ async def update_friend_request_status(
     db.add(notification)
     await db.commit()
     await db.refresh(notification)
-        
 
+    # Handle real-time notification delivery
     is_user_online = manager.is_user_online(friend_request.from_user_id)
     logger.info(f"Recipient user online: {is_user_online}")
-    # ✅ Send WebSocket notification on ACCEPTED or REJECTED
-    if (is_user_online):
+    
+    if is_user_online:
+        # Send WebSocket notification for online users
         if update.status in [FriendRequestStatus.ACCEPTED, FriendRequestStatus.REJECTED, FriendRequestStatus.CANCELLED]:
             try:
                 if update.status == FriendRequestStatus.ACCEPTED:
@@ -348,15 +381,10 @@ async def update_friend_request_status(
                         "updated_at": friend_request.updated_at.isoformat() if friend_request.updated_at else None
                     }
                     await manager.send_notification(friend_request.to_user_id, notification)
-                else:
-                    return  # Ignore any other status
-                
-                # Send the notification to the 'from_user_id' of the friend request
-                #await manager.send_notification(friend_request.from_user_id, json.dumps(notification))
             except Exception as e:
                 logger.warning(f"Failed to send WebSocket notification: {e}")
     else:
-        # Fetch active iOS device tokens for the recipient
+        # Send push notification for offline users
         stmt = select(DeviceToken).where(
             DeviceToken.is_active == True,
             DeviceToken.user_id == friend_request.from_user_id,
@@ -368,7 +396,6 @@ async def update_friend_request_status(
         if not device_tokens:
             logger.info(f"No active iOS device tokens found for user {friend_request.from_user_id}")
 
-        # Send push notifications
         try:
             notification_responses = await send_push_notifications(device_tokens, notification)
             logger.info(f"Push notifications sent: {len(notification_responses)} responses")
@@ -376,6 +403,7 @@ async def update_friend_request_status(
             logger.exception("Error while sending push notifications.")
             notification_responses = []
     
+    # Prepare response data
     response_data = {
         "id": friend_request.id,
         "from_user_id": friend_request.from_user_id,
@@ -391,9 +419,17 @@ async def get_friend_status(
     user_id: str, db: AsyncSession, current_user: dict
 ):
     """
-    Get the friendship status between current user and another user
+    Get the friendship status between current user and another user.
+    
+    Args:
+        user_id: ID of the user to check status with
+        db: AsyncSession for database operations
+        current_user: Dictionary containing current user information
+        
+    Returns:
+        FriendStatusResponse: Object containing friendship status information
     """
-    # Check if users are friends
+    # Check friendship status
     results = await db.execute(
         select(Friend).where(
             or_(
@@ -423,7 +459,7 @@ async def get_friend_status(
     )
     friend_request = results.scalar_one_or_none()
 
-    # Check if either user has blocked the other
+    # Check block status
     results = await db.execute(
         select(UserBlock).where(
             UserBlock.blocker_id == current_user['uid'],
@@ -451,16 +487,31 @@ async def get_friend_status(
 async def block_user(
     block: UserBlockCreate, db: AsyncSession, current_user: dict
 ):
+    """
+    Block a user and remove any existing friendship or pending requests.
+    
+    Args:
+        block: UserBlockCreate object containing block details
+        db: AsyncSession for database operations
+        current_user: Dictionary containing current user information
+        
+    Returns:
+        UserBlock: The created block object
+        
+    Raises:
+        HTTPException: If user tries to block themselves or block already exists
+    """
+    # Prevent self-blocking
     if current_user['uid'] == block.blocked_id:
         raise HTTPException(status_code=400, detail="You can't block yourself")
 
-    # Check if target user exists
+    # Verify target user exists
     target_user = await db.execute(select(User).where(User.id == block.blocked_id))
     target_user = target_user.scalar_one_or_none()
     if not target_user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # Check if already blocked
+    # Check for existing block
     existing_block = await db.execute(
         select(UserBlock).where(
             UserBlock.blocker_id == current_user['uid'],
@@ -479,7 +530,7 @@ async def block_user(
         reason=block.reason
     )
 
-    # Remove any existing friend relationships
+    # Remove existing friendship
     await db.execute(
         delete(Friend).where(
             or_(
@@ -489,7 +540,7 @@ async def block_user(
         )
     )
 
-    # Cancel any pending friend requests
+    # Remove pending friend requests
     await db.execute(
         delete(FriendRequest).where(
             or_(
@@ -516,6 +567,21 @@ async def block_user(
 async def unblock_user(
     user_id: str, db: AsyncSession, current_user: dict
 ):
+    """
+    Remove a block between the current user and another user.
+    
+    Args:
+        user_id: ID of the user to unblock
+        db: AsyncSession for database operations
+        current_user: Dictionary containing current user information
+        
+    Returns:
+        dict: Success message
+        
+    Raises:
+        HTTPException: If block doesn't exist
+    """
+    # Find and remove block
     block = await db.execute(
         select(UserBlock).where(
             UserBlock.blocker_id == current_user['uid'],
@@ -536,16 +602,27 @@ async def report_user(
     report: UserReportCreate, db: AsyncSession, current_user: dict
 ):
     """
-    Report a user
+    Create a report against another user.
+    
+    Args:
+        report: UserReportCreate object containing report details
+        db: AsyncSession for database operations
+        current_user: Dictionary containing current user information
+        
+    Returns:
+        UserReport: The created report object
+        
+    Raises:
+        HTTPException: If reported user doesn't exist
     """
-    # Check if target user exists
+    # Verify reported user exists
     target_user = await db.execute(select(User).where(User.id == report.reported_id))
     target_user = target_user.scalar_one_or_none()
 
     if not target_user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # Create report
+    # Create and save report
     user_report = UserReport(
         reporter_id=current_user['uid'],
         reported_id=report.reported_id,
@@ -561,6 +638,16 @@ async def report_user(
 async def get_friends(
     db: AsyncSession, current_user: dict
 ):
+    """
+    Get all friends of the current user.
+    
+    Args:
+        db: AsyncSession for database operations
+        current_user: Dictionary containing current user information
+        
+    Returns:
+        List[Friend]: List of friend relationships
+    """
     friends = await db.execute(
         select(Friend)
         .options(joinedload(Friend.friend))
@@ -573,11 +660,22 @@ async def remove_friend(
     friend_id: str, db: AsyncSession, current_user: dict
 ):
     """
-    Remove a friend (bidirectional). Returns 404 if friendship doesn't exist.
+    Remove a friendship between the current user and another user.
+    
+    Args:
+        friend_id: ID of the user to remove as friend
+        db: AsyncSession for database operations
+        current_user: Dictionary containing current user information
+        
+    Returns:
+        dict: Success message
+        
+    Raises:
+        HTTPException: If friendship doesn't exist
     """
     uid = current_user['uid']
 
-    # Delete any pending friend requests between these users (in either direction)
+    # Remove any pending friend requests
     await db.execute(
         delete(FriendRequest).where(
             or_(
@@ -587,7 +685,7 @@ async def remove_friend(
         )
     )
 
-    # Check if the friendship exists (in either direction)
+    # Verify friendship exists
     result = await db.execute(
         select(Friend).where(
             or_(
@@ -601,7 +699,7 @@ async def remove_friend(
     if not existing_friendship:
         raise HTTPException(status_code=404, detail="Friendship not found")
 
-    # Delete both directions
+    # Remove friendship in both directions
     await db.execute(
         delete(Friend).where(
             or_(
@@ -619,7 +717,14 @@ async def get_blocked_users(
     db: AsyncSession, current_user: dict
 ):
     """
-    Get a list of users that the current user has blocked.
+    Get all users that the current user has blocked.
+    
+    Args:
+        db: AsyncSession for database operations
+        current_user: Dictionary containing current user information
+        
+    Returns:
+        List[UserBlock]: List of block relationships
     """
     uid = current_user['uid']
 
@@ -630,8 +735,15 @@ async def get_blocked_users(
 
 async def are_friends(db: AsyncSession, user1_id: str, user2_id: str) -> bool:
     """
-    Check if user1 and user2 are friends. Since friendships are stored bidirectionally,
-    check both directions.
+    Check if two users are friends.
+    
+    Args:
+        db: AsyncSession for database operations
+        user1_id: ID of first user
+        user2_id: ID of second user
+        
+    Returns:
+        bool: True if users are friends, False otherwise
     """
     stmt = select(Friend).where(
         (Friend.user_id == user1_id) & (Friend.friend_id == user2_id)
@@ -641,5 +753,3 @@ async def are_friends(db: AsyncSession, user1_id: str, user2_id: str) -> bool:
     friendship = result.scalar_one_or_none()
 
     return friendship is not None
-
-

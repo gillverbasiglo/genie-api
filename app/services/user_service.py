@@ -12,21 +12,61 @@ from app.schemas.invitation import ContactCheckResponse
 from app.schemas.users import UpdateArchetypesAndKeywordsRequest, UserCreate
 
 async def get_user_by_id(db: AsyncSession, user_id: str) -> Optional[User]:
+    """
+    Retrieve a user by their unique identifier.
+    
+    Args:
+        db: AsyncSession - Database session for executing queries
+        user_id: str - Unique identifier of the user
+        
+    Returns:
+        Optional[User]: User object if found, None otherwise
+    """
     query = select(User).where(User.id == user_id)
     result = await db.execute(query)
     return result.scalar_one_or_none()
 
 async def get_user_by_email(db: AsyncSession, email: str) -> Optional[User]:
+    """
+    Retrieve a user by their email address.
+    
+    Args:
+        db: AsyncSession - Database session for executing queries
+        email: str - Email address of the user
+        
+    Returns:
+        Optional[User]: User object if found, None otherwise
+    """
     query = select(User).where(User.email == email)
     result = await db.execute(query)
     return result.scalar_one_or_none()
 
 async def get_user_by_phone(db: AsyncSession, phone: str) -> Optional[User]:
+    """
+    Retrieve a user by their phone number.
+    
+    Args:
+        db: AsyncSession - Database session for executing queries
+        phone: str - Phone number of the user
+        
+    Returns:
+        Optional[User]: User object if found, None otherwise
+    """
     query = select(User).where(User.phone == phone)
     result = await db.execute(query)
     return result.scalar_one_or_none()
 
 async def create_user(db: AsyncSession, user: User) -> User:
+    """
+    Create a new user in the database.
+    
+    Args:
+        db: AsyncSession - Database session for executing queries
+        user: User - User object to be created
+        
+    Returns:
+        User: Created user object with updated database fields
+    """
     db.add(user)
     await db.commit()
     await db.refresh(user)
@@ -37,6 +77,21 @@ async def update_user_archetypes_and_keywords(
     db: AsyncSession,
     current_user: dict
 ):
+    """
+    Update a user's archetypes and keywords preferences.
+    
+    Args:
+        request: UpdateArchetypesAndKeywordsRequest - Request containing new archetypes and keywords
+        db: AsyncSession - Database session for executing queries
+        current_user: dict - Current authenticated user information
+        
+    Returns:
+        dict: Updated archetypes and keywords
+        
+    Raises:
+        HTTPException: If user is not found
+    """
+    # Fetch user from database
     result = await db.execute(select(User).where(User.id == current_user["uid"]))
     user = result.scalar_one_or_none()
 
@@ -46,6 +101,7 @@ async def update_user_archetypes_and_keywords(
             detail="User not found"
         )
 
+    # Update user preferences
     user.archetypes = [archetype.model_dump() for archetype in request.archetypes]
     user.keywords = [keyword.model_dump() for keyword in request.keywords]
 
@@ -58,6 +114,19 @@ async def update_user_archetypes_and_keywords(
     }
 
 async def get_current_user_info(user_id: str, db: AsyncSession):
+    """
+    Retrieve detailed information about the current user.
+    
+    Args:
+        user_id: str - Unique identifier of the user
+        db: AsyncSession - Database session for executing queries
+        
+    Returns:
+        User: User object containing user information
+        
+    Raises:
+        HTTPException: If user is not found
+    """
     stmt = select(User).where(User.id == user_id)
     result = await db.execute(stmt)
     user = result.scalar_one_or_none()
@@ -75,21 +144,35 @@ async def check_contacts(
     user_id: str,
     db: AsyncSession
 ) -> List[ContactCheckResponse]:
+    """
+    Check the status of contacts (phone numbers) in the system.
+    Verifies if contacts are registered users and if they have pending invitations.
     
-    # Check if user exists
+    Args:
+        phone_numbers: List[str] - List of phone numbers to check
+        user_id: str - ID of the user performing the check
+        db: AsyncSession - Database session for executing queries
+        
+    Returns:
+        List[ContactCheckResponse]: List of contact status responses
+        
+    Raises:
+        HTTPException: If the checking user is not found
+    """
+    # Verify the checking user exists
     stmt = select(User).where(User.id == user_id)
     query_result = await db.execute(stmt)
     inviter = query_result.scalar_one_or_none()
     if inviter is None:
         raise HTTPException(status_code=404, detail="User not found")
     
-    # Query users with these phone numbers
+    # Find registered users with the provided phone numbers
     stmt = select(User).where(User.phone_number.in_(phone_numbers))
     query_result = await db.execute(stmt)
     users = query_result.scalars().all()
     user_map = {user.phone_number: user for user in users}
     
-    # Query pending invitations for these phone numbers
+    # Check for pending invitations
     stmt = select(Invitation).where(
         Invitation.inviter_id == user_id,
         Invitation.invitee_phone.in_(phone_numbers),
@@ -99,7 +182,7 @@ async def check_contacts(
     pending_invites = query_result.scalars().all()
     invite_map = {invite.invitee_phone: invite for invite in pending_invites}
     
-    # Create response for each phone number
+    # Generate response for each phone number
     response = []
     for phone in phone_numbers:
         user = user_map.get(phone)
@@ -122,8 +205,23 @@ async def register_user(
     user_id: str,
     db: AsyncSession
 ) -> Dict[str, str]:
+    """
+    Register a new user in the system.
+    Handles user creation and invitation acceptance if an invite code is provided.
+    
+    Args:
+        user_data: UserCreate - User registration data
+        user_id: str - Unique identifier for the new user
+        db: AsyncSession - Database session for executing queries
+        
+    Returns:
+        Dict[str, str]: Registration success message and user details
+        
+    Raises:
+        HTTPException: If registration fails due to duplicate data or other errors
+    """
     try:
-        # Create new user
+        # Create new user instance
         new_user = User(
             id=user_id,
             phone_number= user_data.phone_number,
@@ -132,7 +230,7 @@ async def register_user(
             created_at=datetime.now(timezone.utc)
         )
 
-        # If invite code is provided, link it to the invitation
+        # Handle invitation if invite code is provided
         if user_data.invite_code:
             query_result = await db.execute(select(Invitation).where(
                 Invitation.invite_code == user_data.invite_code,
@@ -141,11 +239,10 @@ async def register_user(
             invitation = query_result.scalar_one_or_none()
 
             if invitation:
-                # Update invitation status
+                # Update invitation status and link to new user
                 invitation.status = "accepted"
                 invitation.accepted_at = datetime.now(timezone.UTC)
                 invitation.invitee_id = user_id
-                # Set the invited_by relationship
                 new_user.invited_by = invitation.inviter_id
 
         db.add(new_user)
@@ -176,7 +273,18 @@ async def check_contacts_list(
     current_user_id: str,
     db: AsyncSession
 ) -> List[User]:
-    # Get IDs of user's friends (both directions)
+    """
+    Search for users by phone number, excluding current user and existing friends.
+    
+    Args:
+        phone_number: str - Phone number to search for (partial match)
+        current_user_id: str - ID of the current user
+        db: AsyncSession - Database session for executing queries
+        
+    Returns:
+        List[User]: List of matching users
+    """
+    # Get IDs of existing friends (both directions)
     friend_ids_stmt = select(Friend.friend_id).where(Friend.user_id == current_user_id)
     reverse_friend_ids_stmt = select(Friend.user_id).where(Friend.friend_id == current_user_id)
 
@@ -185,7 +293,7 @@ async def check_contacts_list(
 
     friend_ids = set(friend_ids_result.scalars().all()) | set(reverse_friend_ids_result.scalars().all())
 
-    # Query users matching the phone number (partial match), excluding current user and existing friends
+    # Search for users matching the phone number
     stmt = select(User).where(
         User.phone_number.cast(String).like(f"%{phone_number}%"),
         User.id != current_user_id,
@@ -202,7 +310,19 @@ async def delete_user(
     current_user_id: str,
     db: AsyncSession
 ):
-    # Fetch user by ID or phone number
+    """
+    Delete a user and all associated data from the system.
+    Only allows users to delete their own account.
+    
+    Args:
+        identifier: str - User ID or phone number to identify the user
+        current_user_id: str - ID of the current authenticated user
+        db: AsyncSession - Database session for executing queries
+        
+    Raises:
+        HTTPException: If user not found, unauthorized, or deletion fails
+    """
+    # Find user by ID or phone number
     stmt = select(User).where(
         or_(
             User.id == identifier,
@@ -218,7 +338,7 @@ async def delete_user(
             detail="User not found"
         )
 
-    # Ensure user is deleting their own account
+    # Verify user is deleting their own account
     if user.id != current_user_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -246,7 +366,7 @@ async def delete_user(
             ).execution_options(synchronize_session="fetch")
         )
 
-        # Delete user
+        # Delete user record
         await db.delete(user)
         await db.commit()
 
