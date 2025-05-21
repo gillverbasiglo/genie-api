@@ -20,9 +20,27 @@ services:
     networks:
       - genie_network
 
+  redis:
+    image: redis:7-alpine
+    container_name: genie_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - genie_network
+
 volumes:
   rabbitmq_data:
     name: genie_rabbitmq_data
+  redis_data:
+    name: genie_redis_data
 
 networks:
   genie_network:
