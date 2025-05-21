@@ -1,0 +1,86 @@
+import asyncio
+import logging
+from typing import Any, List, Optional
+from sqlalchemy.orm import Session
+from app.database import SessionLocal
+from app.models.recommendations import Recommendation, UserRecommendation
+from app.services.recommendation_service import stream_genie_recommendations
+from app.schemas.users import Archetype, Keyword
+
+logger = logging.getLogger(__name__)
+
+def get_db() -> Session:
+    """Get database session."""
+    db = SessionLocal()
+    try:
+        return db
+    finally:
+        db.close()
+
+async def run_async_recommendations(
+    time_of_day: str,
+    archetypes: Optional[List[Archetype]] = None,
+    keywords: Optional[List[Keyword]] = None,
+    location: Optional[str] = None,
+    ip_address: Optional[str] = None,
+) -> List[dict]:
+    """
+    Run the async recommendation service and collect all results.
+    """
+    recommendations = []
+    try:
+        async for recommendation in stream_genie_recommendations(
+            time_of_day=time_of_day,
+            archetypes=archetypes,
+            keywords=keywords,
+            location=location,
+            ip_address=ip_address,
+        ):
+            recommendations.append(recommendation)
+    except Exception as e:
+        logger.error(f"Error in recommendation stream: {str(e)}")
+        raise
+    return recommendations
+
+def store_recommendations(
+    db: Session,
+    user_id: int,
+    recommendations: List[dict]
+) -> List[Recommendation]:
+    """
+    Store recommendations in the database.
+    """
+    try:
+        stored_recommendations = []
+        for rec_data in recommendations:
+            # Create recommendation
+            recommendation = Recommendation(
+                category=rec_data.get("category", "general"),
+                prompt=rec_data.get("prompt", ""),
+                search_query=rec_data.get("search_query"),
+                place_details=rec_data.get("place_details", {}),
+                archetypes=rec_data.get("archetypes", []),
+                keywords=rec_data.get("keywords", []),
+                image_concept=rec_data.get("image_concept"),
+                image_url=rec_data.get("image_url"),
+                source=rec_data.get("source", "genie-ai"),
+                external_id=rec_data.get("external_id")
+            )
+            db.add(recommendation)
+            db.flush()  # Get the ID without committing
+            
+            # Create user recommendation link
+            user_recommendation = UserRecommendation(
+                user_id=user_id,
+                recommendation_id=recommendation.id,
+                is_seen=False
+            )
+            db.add(user_recommendation)
+            stored_recommendations.append(recommendation)
+        
+        db.commit()
+        return stored_recommendations
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error storing recommendations: {str(e)}")
+        raise 
