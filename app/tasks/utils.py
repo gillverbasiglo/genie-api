@@ -45,24 +45,28 @@ async def run_async_recommendations(
 def store_recommendations(
     db: Session,
     user_id: int,
-    recommendations: List[dict]
+    recommendations_data: List[dict]
 ) -> List[Recommendation]:
     """
     Store recommendations in the database.
     """
     try:
         stored_recommendations = []
+        print(f"Storing recommendations for user {user_id}, recommendations: {recommendations_data}")
+        recommendations_result = recommendations_data[0]
+        recommendations = recommendations_result["recommendations"]
+        
         for rec_data in recommendations:
             # Create recommendation
             recommendation = Recommendation(
                 category=rec_data.get("category", "general"),
                 prompt=rec_data.get("prompt", ""),
-                search_query=rec_data.get("search_query"),
-                place_details=rec_data.get("place_details", {}),
-                archetypes=rec_data.get("archetypes", []),
-                keywords=rec_data.get("keywords", []),
-                image_concept=rec_data.get("image_concept"),
-                image_url=rec_data.get("image_url"),
+                search_query=rec_data.get("searchQuery"),
+                place_details=rec_data.get("placeDetails", {}),
+                archetypes=rec_data.get("usedArchetypes", []),
+                keywords=rec_data.get("usedKeywords", []),
+                image_concept=rec_data.get("recommendedImageConcept"),
+                image_url=rec_data.get("recommendedImage"),
                 source=rec_data.get("source", "genie-ai"),
                 external_id=rec_data.get("external_id")
             )

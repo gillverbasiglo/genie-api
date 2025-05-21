@@ -71,7 +71,7 @@ def generate_user_recommendations(
         stored_recommendations = store_recommendations(
             db=db,
             user_id=user_id,
-            recommendations=recommendations
+            recommendations_data=recommendations
         )
         
         logger.info(
