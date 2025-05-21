@@ -44,7 +44,7 @@ class UserRecommendation(Base):
     __tablename__ = 'user_recommendations'
     
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    user_id = Column(String, ForeignKey('users.id'), nullable=False)
     recommendation_id = Column(Integer, ForeignKey('recommendations.id'), nullable=False)
     
     # User interaction tracking
