@@ -8,6 +8,7 @@ dependencies = [
     "alembic>=1.15.2",
     "asyncpg>=0.30.0",
     "boto3>=1.37.8",
+    "celery>=5.5.2",
     "exa-py>=1.11.0",
     "fastapi>=0.115.11",
     "fastapi-cache2>=0.2.2",
