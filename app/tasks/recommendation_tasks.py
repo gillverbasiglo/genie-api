@@ -4,7 +4,7 @@ import asyncio
 from typing import List, Optional
 from celery import Task
 from app.tasks.celery_app import celery_app
-from app.tasks.utils import get_db, run_async_recommendations, store_recommendations
+from app.tasks.utils import get_db, run_async_recommendations, store_recommendations, get_user_by_id
 from app.schemas.users import Archetype, Keyword
 
 logger = logging.getLogger(__name__)
@@ -108,8 +108,6 @@ def generate_custom_recommendations(
     user_id: int,
     time_of_day: str,
     location: str,
-    keywords: Optional[List[str]] = None,
-    archetypes: Optional[List[str]] = None
 ) -> dict:
     """
     Generate recommendations with custom parameters.
@@ -126,16 +124,18 @@ def generate_custom_recommendations(
         extra={
             "user_id": user_id,
             "time_of_day": time_of_day,
-            "location": location,
-            "keywords": keywords,
-            "archetypes": archetypes
+            "location": location
         }
     )
     
     try:
+        # Get database session
+        db = get_db()
+
+        user = get_user_by_id(db, user_id)
         # Convert string lists to enums
-        keyword_enums = [Keyword(k) for k in (keywords or [])]
-        archetype_enums = [Archetype(a) for a in (archetypes or [])]
+        keywords = user.keywords
+        archetypes = user.archetypes
         
         # Get database session
         db = get_db()
@@ -145,8 +145,8 @@ def generate_custom_recommendations(
             run_async_recommendations(
                 time_of_day=time_of_day,
                 location=location,
-                keywords=keyword_enums,
-                archetypes=archetype_enums
+                keywords=keywords,
+                archetypes=archetypes
             )
         )
         
@@ -154,7 +154,7 @@ def generate_custom_recommendations(
         stored_recommendations = store_recommendations(
             db=db,
             user_id=user_id,
-            recommendations=recommendations
+            recommendations_data=recommendations
         )
         
         logger.info(

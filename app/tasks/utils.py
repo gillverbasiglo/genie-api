@@ -4,6 +4,7 @@ from typing import Any, List, Optional
 from sqlalchemy.orm import Session
 from app.database import SessionLocal
 from app.models.recommendations import Recommendation, UserRecommendation
+from app.models.user import User
 from app.services.recommendation_service import stream_genie_recommendations
 from app.schemas.users import Archetype, Keyword
 
@@ -88,3 +89,10 @@ def store_recommendations(
         db.rollback()
         logger.error(f"Error storing recommendations: {str(e)}")
         raise 
+
+def get_user_by_id(db: Session, user_id: int) -> Optional[User]:
+    """
+    Get a user by their unique identifier.
+    """
+    user = db.query(User).get(user_id)
+    return user
