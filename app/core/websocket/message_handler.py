@@ -5,7 +5,7 @@ from typing import Callable, Dict
 from sqlalchemy import select
 from app.models.chat.private_chat_message import Message
 from app.schemas.websocket import WebSocketMessageType
-from app.schemas.private_chat_message import MessageStatus
+from app.schemas.private_chat_message import MessageStatus, MessageType
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime
 from app.services.friends_service import are_friends
@@ -43,7 +43,10 @@ class MessageHandler:
                         id=uuid.uuid4(),
                         sender_id=user_id,
                         receiver_id=receiver_id,
+                        message_type=MessageType.TEXT,
                         content=content,
+                        media_url=None,
+                        metadata=None,
                         status=MessageStatus.SENT,
                         created_at=timestamp,
                         updated_at=timestamp
