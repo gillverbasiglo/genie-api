@@ -4,13 +4,14 @@ import logging
 import uuid
 import random
 from typing import List, Union
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi_cache.decorator import cache
 from google import genai
 from openai import AsyncOpenAI
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 from typing import Optional
 from enum import Enum
 from tenacity import retry, stop_after_attempt, wait_exponential
@@ -18,7 +19,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 from app.common import get_current_user
 from app.config import settings
 from app.init_db import get_db
-from app.models import User
+from app.models import User, UserRecommendation
 from app.services import get_user_by_id, find_common_archetypes, load_cover_images, select_cover_image, get_s3_image_url
 
 # Configure logging
@@ -534,4 +535,58 @@ async def get_friend_portal_recommendations(
         return recommendations
     except Exception as e:
         logger.error(f"Error finding common archetypes: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/user-recommendations", response_model=List[dict])
+async def get_user_recommendations(
+    skip: int = Query(0, ge=0, description="Number of records to skip"),
+    limit: int = Query(25, ge=1, le=100, description="Number of records to return"),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Get unseen recommendations for the current user.
+    
+    Args:
+        skip: Number of records to skip (pagination)
+        limit: Maximum number of records to return
+        db: Database session
+        current_user: Currently authenticated user
+        
+    Returns:
+        List of unseen recommendations
+    """
+    try:
+        # Query user recommendations with unseen filter and eager loading of recommendation
+        query = (
+            select(UserRecommendation)
+            .options(selectinload(UserRecommendation.recommendation))
+            .where(
+                UserRecommendation.user_id == current_user["uid"],
+                UserRecommendation.is_seen == False
+            )
+            .offset(skip)
+            .limit(limit)
+        )
+        
+        result = await db.execute(query)
+        user_recommendations = result.scalars().all()
+        
+        # Return only the recommendation data
+        return [
+            {
+                "id": rec.recommendation.id,
+                "category": rec.recommendation.category,
+                "prompt": rec.recommendation.prompt,
+                "search_query": rec.recommendation.search_query,
+                "place_details": rec.recommendation.place_details,
+                "image_url": rec.recommendation.image_url,
+                "archetypes": rec.recommendation.archetypes,
+                "keywords": rec.recommendation.keywords
+            }
+            for rec in user_recommendations
+            if rec.recommendation  # Ensure recommendation exists
+        ]
+    except Exception as e:
+        logger.error(f"Error fetching user recommendations: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
