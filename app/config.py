@@ -53,7 +53,7 @@ class Settings(BaseSettings):
                 elif info.field_name == "push_notification_url":
                     v = secrets.get_db_credentials()['push_notification_url']
                 elif info.field_name == "GENIE_AI_URL":
-                    v = secrets.get_db_credentials()['GENIE_AI_URL']
+                    v = secrets.get_api_key()['GENIE_AI_URL']
                 return v
             except Exception as e:
                 # If there's an error getting secrets, fall back to the env value
