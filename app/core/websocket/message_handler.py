@@ -69,7 +69,7 @@ class MessageHandler:
         # Get history between the two users
         #history = await get_history(user_1_id, user_2_id, self.db)
 
-        try:
+        """try:
             async for chunk in call_recommendation_api(self.db, user_1_id, user_2_id, query):
                 await self.manager.send_personal_message(user_1_id, {
                     "type": WebSocketMessageType.CHAT_GENIE_SUMMON,
@@ -81,6 +81,28 @@ class MessageHandler:
                 })
         except Exception as e:
             logger.error(f"Streaming recommendation API failed: {e}")
+            await self.manager.send_personal_message(user_1_id, {
+                "type": "ERROR",
+                "message": "Failed to get response from genie."
+            })
+            await self.manager.send_personal_message(user_2_id, {
+                "type": "ERROR",
+                "message": "Failed to get response from genie."
+            })"""
+        try:
+            result = await call_recommendation_api(self.db, user_1_id, user_2_id, query)
+
+            await self.manager.send_personal_message(user_1_id, {
+                "type": WebSocketMessageType.CHAT_GENIE_SUMMON,
+                "message": result
+            })
+            await self.manager.send_personal_message(user_2_id, {
+                "type": WebSocketMessageType.CHAT_GENIE_SUMMON,
+                "message": result
+            })
+
+        except Exception as e:
+            logger.error(f"Recommendation API failed: {e}")
             await self.manager.send_personal_message(user_1_id, {
                 "type": "ERROR",
                 "message": "Failed to get response from genie."
