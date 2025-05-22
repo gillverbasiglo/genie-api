@@ -1,3 +1,4 @@
+from typing import Optional
 from pydantic import field_validator, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -21,7 +22,7 @@ class Settings(BaseSettings):
     aviation_stack_api_key: SecretStr
     tmdb_api_key: SecretStr
     push_notification_url: SecretStr
-    GENIE_AI_URL: str
+    GENIE_AI_URL: Optional[str] = None
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     @field_validator("db_username", "db_password", "groq_api_key", "openai_api_key", "trip_advisor_api_key", "google_api_key", "tavily_api_key", "exa_api_key", "aviation_stack_api_key", "tmdb_api_key",  "push_notification_url", "GENIE_AI_URL", mode="before")
