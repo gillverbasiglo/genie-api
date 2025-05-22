@@ -4,17 +4,18 @@ import logging
 import uuid
 import random
 from typing import List, Union
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Path, status
 from fastapi_cache.decorator import cache
 from google import genai
 from openai import AsyncOpenAI
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from typing import Optional
 from enum import Enum
 from tenacity import retry, stop_after_attempt, wait_exponential
+from datetime import datetime
 
 from app.common import get_current_user
 from app.config import settings
@@ -589,4 +590,56 @@ async def get_user_recommendations(
         ]
     except Exception as e:
         logger.error(f"Error fetching user recommendations: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.put("/{recommendation_id}/seen", status_code=status.HTTP_204_NO_CONTENT)
+async def mark_recommendation_seen(
+    recommendation_id: int = Path(..., description="The ID of the recommendation to mark as seen"),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Mark a recommendation as seen for the current user.
+    
+    Args:
+        recommendation_id: ID of the recommendation to mark as seen
+        db: Database session
+        current_user: Currently authenticated user
+        
+    Returns:
+        None
+        
+    Raises:
+        HTTPException: If recommendation not found or update fails
+    """
+    try:
+        # Update the UserRecommendation record
+        query = (
+            update(UserRecommendation)
+            .where(
+                UserRecommendation.recommendation_id == recommendation_id,
+                UserRecommendation.user_id == current_user["uid"],
+                UserRecommendation.is_seen == False,
+                UserRecommendation.is_seen == False  # Only update if not already seen
+            )
+            .values(
+                is_seen=True,
+                seen_at=datetime.now(datetime.UTC)
+            )
+        )
+        
+        result = await db.execute(query)
+        await db.commit()
+        
+        if result.rowcount == 0:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Recommendation not found or already seen"
+            )
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"Error marking recommendation as seen: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
