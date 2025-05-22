@@ -22,6 +22,7 @@ from app.config import settings
 from app.init_db import get_db
 from app.models import User, UserRecommendation
 from app.services import get_user_by_id, find_common_archetypes, load_cover_images, select_cover_image, get_s3_image_url
+from app.tasks import generate_custom_recommendations
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -39,6 +40,7 @@ class Provider(str, Enum):
 # Define the Recommendation model
 class RecommendationRequest(BaseModel):
     location: str
+    time_of_day: str
     provider: Provider = Provider.GROQ
     model: str = "llama-3.1-8b-instant"
     archetypes: str
@@ -139,79 +141,18 @@ FUNCTION_SCHEMA = {
     }
 }
 
-@router.post("/generate", response_model=List[Recommendation])
-# @cache(expire=timedelta(hours=24), key_builder=lambda r: f"{r.location}:{r.archetypes}:{r.keywords}")
+@router.post("/generate", status_code=status.HTTP_204_NO_CONTENT)
 async def generate_recommendations(
     request: RecommendationRequest,
+    current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     try:
-        # Select the appropriate client based on provider
-        if request.provider == Provider.GROQ:
-            client = groq_client
-        elif request.provider == Provider.OPENAI:
-            client = openai_client
-        elif request.provider == Provider.GOOGLE:
-            client = google_client
-        else:
-            raise HTTPException(status_code=400, detail="Invalid provider specified")
-
-        if request.user_prompt:
-            recommendations = await generate_recommendations_for_user_request(
-                client=client,
-                location=request.location,
-                archetypes=request.archetypes,
-                keywords=request.keywords,
-                user_request=request.user_prompt,
-                max_recommendations=request.max_recommendations,
-                model=request.model
-            )
-
-            # Load cover images
-            cover_images = load_cover_images()
-
-            # Iterate through recommendations and add cover images using the value on the recommendedImage field
-            for recommendation in recommendations:
-                image_url = select_cover_image(cover_images, recommendation["recommendedImage"])
-                recommendation["recommendedImage"] = get_s3_image_url(image_url)
-
-            return [Recommendation(id=str(uuid.uuid4()), **rec) for rec in recommendations]
-        else:
-            # Randomly shuffle the recommendation categories based on max_recommendations
-            categories = random.sample(recommendation_categories, request.max_recommendations)
-            
-            # Generate recommendations for each category
-            recommendation_tasks = [
-                generate_batch_recommendations(
-                    client=client,
-                    location=request.location,
-                    keywords=request.keywords,
-                    archetypes=request.archetypes,
-                    category=category,
-                    model=request.model
-                )
-                for category in categories
-            ]
-            
-            if recommendation_tasks:
-                recommendations = await asyncio.gather(*recommendation_tasks, return_exceptions=True)
-                # Process results and filter out any errors
-                processed_recommendations = []
-                for i, result in enumerate(recommendations):
-                    if isinstance(result, Exception):
-                        logger.error(f"Error generating recommendations for category {categories[i]}: {result}")
-                    else:
-                        processed_recommendations.append(result[0])
-                
-                # Load cover images
-                cover_images = load_cover_images()
-
-                # Iterate through recommendations and add cover images using the value on the recommendedImage field
-                for recommendation in processed_recommendations:
-                    image_url = select_cover_image(cover_images, recommendation["recommendedImage"])
-                    recommendation["recommendedImage"] = get_s3_image_url(image_url)
-
-                return [Recommendation(id=str(uuid.uuid4()), **rec) for rec in processed_recommendations]
+        generate_custom_recommendations.delay(
+            user_id=current_user["uid"],
+            location=request.location,
+            time_of_day=request.time_of_day,
+        )
             
     except Exception as e:
         logger.error(f"Error generating recommendations: {str(e)}")
