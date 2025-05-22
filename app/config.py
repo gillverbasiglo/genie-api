@@ -21,10 +21,10 @@ class Settings(BaseSettings):
     aviation_stack_api_key: SecretStr
     tmdb_api_key: SecretStr
     push_notification_url: SecretStr
-    genie_ai_url: str
+    GENIE_AI_URL: str
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    @field_validator("db_username", "db_password", "groq_api_key", "openai_api_key", "trip_advisor_api_key", "google_api_key", "tavily_api_key", "exa_api_key", "aviation_stack_api_key", "tmdb_api_key",  "push_notification_url", mode="before")
+    @field_validator("db_username", "db_password", "groq_api_key", "openai_api_key", "trip_advisor_api_key", "google_api_key", "tavily_api_key", "exa_api_key", "aviation_stack_api_key", "tmdb_api_key",  "push_notification_url", "GENIE_AI_URL", mode="before")
     @classmethod
     def load_secrets(cls, v, info):
         if info.data.get("environment") == "production":
@@ -52,6 +52,8 @@ class Settings(BaseSettings):
                     v = secrets.get_db_credentials()['password']
                 elif info.field_name == "push_notification_url":
                     v = secrets.get_db_credentials()['push_notification_url']
+                elif info.field_name == "GENIE_AI_URL":
+                    v = secrets.get_db_credentials()['GENIE_AI_URL']
                 return v
             except Exception as e:
                 # If there's an error getting secrets, fall back to the env value
