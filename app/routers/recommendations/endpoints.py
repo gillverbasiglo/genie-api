@@ -520,11 +520,11 @@ async def get_user_recommendations(
                 "id": rec.recommendation.id,
                 "category": rec.recommendation.category,
                 "prompt": rec.recommendation.prompt,
-                "search_query": rec.recommendation.search_query,
-                "place_details": rec.recommendation.place_details,
-                "image_url": rec.recommendation.image_url,
-                "archetypes": rec.recommendation.archetypes,
-                "keywords": rec.recommendation.keywords
+                "searchQuery": rec.recommendation.search_query,
+                "placeDetails": rec.recommendation.place_details,
+                "recommendedImage": rec.recommendation.image_url,
+                "usedArchetypes": rec.recommendation.archetypes,
+                "usedKeywords": rec.recommendation.keywords
             }
             for rec in user_recommendations
             if rec.recommendation  # Ensure recommendation exists
