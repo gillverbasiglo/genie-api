@@ -43,8 +43,8 @@ class RecommendationRequest(BaseModel):
     time_of_day: str
     provider: Provider = Provider.GROQ
     model: str = "llama-3.1-8b-instant"
-    archetypes: str
-    keywords: str
+    archetypes: Optional[str] = None
+    keywords: Optional[str] = None
     max_recommendations: int = 5
     user_prompt: Optional[str] = None
 
