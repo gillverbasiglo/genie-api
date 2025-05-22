@@ -14,6 +14,7 @@ class WebSocketMessageType(str, Enum):
     SHARED_ITEM = "SHARED_ITEM"
     USER_STATUS = "userStatus"
     USER_ACTIVITY = "userActivity"
+    CHAT_GENIE_SUMMON = "CHAT_GENIE_SUMMON"
 
 # Base message schema
 class BaseWebSocketMessage(BaseModel):

@@ -1,4 +1,7 @@
+import json
 import logging
+from fastapi.responses import PlainTextResponse
+import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import and_, or_
@@ -79,4 +82,40 @@ async def get_unread_message_count(
     
     result = await db.execute(query)
     return result.scalar_one()
+
+async def call_recommendation_api(
+    db: AsyncSession,
+    user_1_id: str,
+    user_2_id: str,
+    query: str
+):
+    payload = {
+    "messages": [
+        {
+        "role": "user",
+        "parts": [
+            {
+            "type": "text",
+            "text": query
+            }
+        ]
+        }
+    ],
+    "group": "web",
+    "model": "genie-gemini"
+    }
+    async with httpx.AsyncClient(timeout=None) as client:
+        async with client.stream("POST", "https://genesis-ehfyuaedu-genie-the-ai.vercel.app/api/search", json=payload) as response:
+            async for line in response.aiter_lines():
+                if not line or ':' not in line:
+                    continue  # skip invalid lines
+                prefix, content = line.split(':', 1)
+                try:
+                    parsed = json.loads(content)
+                    yield {prefix: parsed}
+                except json.JSONDecodeError:
+                    yield {prefix: content}
+
+
+
 
