@@ -104,7 +104,8 @@ async def call_recommendation_api(
     "group": "web",
     "model": "genie-gemini"
     }
-    async with httpx.AsyncClient(timeout=None) as client:
+    
+    """async with httpx.AsyncClient(timeout=None) as client:
         async with client.stream("POST", "https://genesis-ehfyuaedu-genie-the-ai.vercel.app/api/search", json=payload) as response:
             async for line in response.aiter_lines():
                 if not line or ':' not in line:
@@ -114,8 +115,23 @@ async def call_recommendation_api(
                     parsed = json.loads(content)
                     yield {prefix: parsed}
                 except json.JSONDecodeError:
-                    yield {prefix: content}
+                    yield {prefix: content}"""
+    async with httpx.AsyncClient(timeout=None) as client:
+        response = await client.post(
+            "https://genesis-ehfyuaedu-genie-the-ai.vercel.app/api/search",
+            json=payload
+        )
+        response.raise_for_status()  # raise exception if the request failed
+        content = response.text
+        result = []
+        for line in content.splitlines():
+            if not line or ':' not in line:
+                continue
+            prefix, data = line.split(':', 1)
+            try:
+                parsed = json.loads(data)
+            except json.JSONDecodeError:
+                parsed = data
+            result.append({prefix: parsed})
 
-
-
-
+        return result
