@@ -15,7 +15,7 @@ from sqlalchemy.orm import selectinload
 from typing import Optional
 from enum import Enum
 from tenacity import retry, stop_after_attempt, wait_exponential
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.common import get_current_user
 from app.config import settings
@@ -624,7 +624,7 @@ async def mark_recommendation_seen(
             )
             .values(
                 is_seen=True,
-                seen_at=datetime.now(datetime.UTC)
+                seen_at=datetime.now(timezone.utc)
             )
         )
         
