@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from typing import Dict, Any, AsyncGenerator, Optional, List
 
 from app.schemas.users import Archetype, Keyword
-
+from app.config import settings
 @dataclass
 class Location:
     country: str
@@ -89,7 +89,7 @@ async def stream_genie_recommendations(
     Raises:
         httpx.HTTPError: If the request fails
     """
-    GENIE_AI_URL = "https://genesis-ehfyuaedu-genie-the-ai.vercel.app/api/recommendations"
+    GENIE_AI_URL = settings.genie_ai_url
     
     
     if ip_address:

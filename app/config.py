@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     aviation_stack_api_key: SecretStr
     tmdb_api_key: SecretStr
     push_notification_url: SecretStr
+    genie_ai_url: str
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     @field_validator("db_username", "db_password", "groq_api_key", "openai_api_key", "trip_advisor_api_key", "google_api_key", "tavily_api_key", "exa_api_key", "aviation_stack_api_key", "tmdb_api_key",  "push_notification_url", mode="before")
