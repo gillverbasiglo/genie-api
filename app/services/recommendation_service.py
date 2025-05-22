@@ -89,7 +89,7 @@ async def stream_genie_recommendations(
     Raises:
         httpx.HTTPError: If the request fails
     """
-    GENIE_AI_URL = settings.genie_ai_url
+    GENIE_AI_URL = settings.GENIE_AI_URL
     
     
     if ip_address:
