@@ -68,7 +68,7 @@ class MessageOut(MessageBase):
     updated_at: Optional[datetime] = None
 
     class Config:
-        orm_mode = True  # Enables ORM mode for SQLAlchemy model compatibility
+        from_attributes = True  # Enables ORM mode for SQLAlchemy model compatibility
         
 class PaginatedMessagesResponse(BaseModel):
     """

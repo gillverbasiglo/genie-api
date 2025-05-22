@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from sqlite3 import IntegrityError
-from fastapi import HTTPException, logger, status
+from fastapi import HTTPException, logger, status, Request
 from app.models import User
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import String, not_, or_, select
@@ -378,3 +378,13 @@ async def delete_user(
             detail="Failed to delete user"
         )
     
+async def get_user_ip_address(request: Request):
+    """
+    Get the IP address of the user.
+    """
+    x_forwarded_for = request.headers.get("X-Forwarded-For")
+    if x_forwarded_for:
+        ip = x_forwarded_for.split(",")[0]
+    else:
+        ip = request.client.host
+    return ip
