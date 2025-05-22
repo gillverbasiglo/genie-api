@@ -1,6 +1,6 @@
 import logging
 import uuid
-from typing import Callable, Dict
+from typing import Callable, Dict, List, Union
 
 from sqlalchemy import select
 from app.models.chat.private_chat_message import Message
@@ -54,6 +54,14 @@ class MessageHandler:
         else:
             logger.warning(f"Unsupported message type: {message_type}")
 
+    def extract_result_only(self, response: List[Dict]) -> Union[Dict, None]:
+        for item in response:
+            if 'a' in item:
+                result = item['a'].get('result')
+                if result:
+                    return result
+        return None
+
     async def handle_chat_genie_summon(self, message_data: dict, user_id: str):
         """
         Handle chat genie summon requests.
@@ -91,10 +99,10 @@ class MessageHandler:
             })"""
         try:
             result = await call_recommendation_api(self.db, user_1_id, user_2_id, query)
-
+            structured_result = self.extract_result_only(result)
             await self.manager.send_personal_message(user_1_id, {
                 "type": WebSocketMessageType.CHAT_GENIE_SUMMON,
-                "message": result
+                "message": structured_result
             })
             await self.manager.send_personal_message(user_2_id, {
                 "type": WebSocketMessageType.CHAT_GENIE_SUMMON,
