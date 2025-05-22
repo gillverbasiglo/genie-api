@@ -83,3 +83,19 @@ class SecretsManager:
         """Get API key for a specific service"""
         secret_id = f'{service_name}-api-key'
         return self.get_secret(secret_id)
+    
+    def get_genie_ai_url(self) -> str:
+        """
+        Get the GENIE_AI_URL from either a dedicated secret or included in db credentials secret.
+        
+        Returns:
+            Genie AI URL as string
+        """
+        try:
+            # Option 1: separate secret
+            secret_id = os.environ.get("GENIE_AI_URL_SECRET_NAME")
+            if secret_id:
+                return self.get_secret(secret_id)
+        except Exception as e:
+            logger.error("Failed to retrieve GENIE_AI_URL from Secrets Manager: %s", e)
+            raise
