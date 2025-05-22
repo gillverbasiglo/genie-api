@@ -42,3 +42,6 @@ class User(Base):
 
     reports_filed = relationship("UserReport", foreign_keys="UserReport.reporter_id", back_populates="reporter", lazy="selectin")
     reports_received = relationship("UserReport", foreign_keys="UserReport.reported_id", back_populates="reported", lazy="selectin")
+
+    # Relationships
+    recommendations = relationship("UserRecommendation", back_populates="user", lazy="selectin")

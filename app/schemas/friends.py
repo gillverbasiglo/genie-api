@@ -108,4 +108,4 @@ class BlockListResponse(BaseModel):
     created_at: datetime  # or Optional[datetime] if nullable
 
     class Config:
-        orm_mode = True
+        from_attributes = True

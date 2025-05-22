@@ -1,14 +1,15 @@
 import logging
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.init_db import get_db
 from app.schemas.invitation import ContactCheckResponse
 from app.schemas.users import UserCreate, MeUserResponse, UpdateArchetypesAndKeywordsRequest
 from app.common import get_current_user
 from app.core.websocket.websocket_manager import manager
-from app.services.user_service import check_contacts, check_contacts_list, delete_user, get_current_user_info, register_user, update_user_archetypes_and_keywords
-
+from app.services.user_service import check_contacts, check_contacts_list, delete_user, get_current_user_info, register_user, update_user_archetypes_and_keywords, get_user_ip_address
+from app.tasks.recommendation_tasks import generate_user_recommendations
+from app.utils.time_utils import get_time_of_day
 # Configure logging for the module
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -93,6 +94,7 @@ async def check_contacts_api(
 @router.post("/register-user", response_model=dict)
 async def register_user_api(
     user_data: UserCreate,
+    request: Request,
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -111,7 +113,11 @@ async def register_user_api(
         HTTPException: If registration fails
     """
     try:
-        return await register_user(user_data, current_user["uid"], db)
+        response = await register_user(user_data, current_user["uid"], db)
+        ip_address = await get_user_ip_address(request)
+        time_of_day = get_time_of_day()  # Get time of day based on server time
+        generate_user_recommendations.delay(current_user["uid"], ip_address, time_of_day)
+        return response
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
