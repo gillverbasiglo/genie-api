@@ -10,6 +10,7 @@ from app.schemas.private_chat_message import MessageStatus, MessageType
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime
 from app.services.chat_service import call_recommendation_api, send_push_notification_for_offline_user
+from app.services.user_service import get_user_by_id
 
 # Set up the logger
 logger = logging.getLogger(__name__)
@@ -194,7 +195,8 @@ class MessageHandler:
                         message_dict
                     )
         else:
-            await send_push_notification_for_offline_user(receiver_id, self.db, "New Message", content)
+            sender_user = await get_user_by_id(self.db, user_id)
+            await send_push_notification_for_offline_user(receiver_id, self.db, sender_user.display_name, content)
 
         
     async def handle_message_status_update(self, message_data: dict, user_id: str):
