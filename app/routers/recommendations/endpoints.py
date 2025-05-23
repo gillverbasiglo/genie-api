@@ -165,7 +165,7 @@ async def generate_recommendations(
         logger.error(f"Error generating recommendations: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
     
-
+@router.post("/generate-legacy")
 async def generate_recommendations_legacy(
     request: RecommendationRequest
 ):
