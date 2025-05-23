@@ -4,7 +4,7 @@ import logging
 import uuid
 import random
 from typing import List, Union
-from fastapi import APIRouter, Depends, HTTPException, Query, Path, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Path, status, Response
 from fastapi_cache.decorator import cache
 from google import genai
 from openai import AsyncOpenAI
@@ -40,11 +40,11 @@ class Provider(str, Enum):
 # Define the Recommendation model
 class RecommendationRequest(BaseModel):
     location: str
-    time_of_day: str
+    time_of_day: Optional[str] = None
     provider: Provider = Provider.GROQ
     model: str = "llama-3.1-8b-instant"
-    archetypes: str
-    keywords: str
+    archetypes: Optional[str] = None
+    keywords: Optional[str] = None
     max_recommendations: int = 5
     user_prompt: Optional[str] = None
 
@@ -141,19 +141,101 @@ FUNCTION_SCHEMA = {
     }
 }
 
-@router.post("/generate", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/generate")
 async def generate_recommendations(
     request: RecommendationRequest,
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     try:
-        generate_custom_recommendations.delay(
-            user_id=current_user["uid"],
-            location=request.location,
-            time_of_day=request.time_of_day,
-        )
+        if request.time_of_day and request.time_of_day in ["morning", "afternoon", "evening", "night"]:
+            generate_custom_recommendations.delay(
+                user_id=current_user["uid"],
+                location=request.location,
+                time_of_day=request.time_of_day,
+            )
+
+            return Response(status_code=status.HTTP_204_NO_CONTENT)
+        elif request.user_prompt and request.archetypes and request.keywords:
+            await generate_recommendations_legacy(request)
+        else:
+            raise HTTPException(status_code=400, detail="Invalid request")
             
+    except Exception as e:
+        logger.error(f"Error generating recommendations: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+    
+@router.post("/generate-legacy")
+async def generate_recommendations_legacy(
+    request: RecommendationRequest
+):
+    try:
+        # Select the appropriate client based on provider
+        if request.provider == Provider.GROQ:
+            client = groq_client
+        elif request.provider == Provider.OPENAI:
+            client = openai_client
+        elif request.provider == Provider.GOOGLE:
+            client = google_client
+        else:
+            raise HTTPException(status_code=400, detail="Invalid provider specified")
+
+        if request.user_prompt:
+            recommendations = await generate_recommendations_for_user_request(
+                client=client,
+                location=request.location,
+                archetypes=request.archetypes,
+                keywords=request.keywords,
+                user_request=request.user_prompt,
+                max_recommendations=request.max_recommendations,
+                model=request.model
+            )
+
+            # Load cover images
+            cover_images = load_cover_images()
+
+            # Iterate through recommendations and add cover images using the value on the recommendedImage field
+            for recommendation in recommendations:
+                image_url = select_cover_image(cover_images, recommendation["recommendedImage"])
+                recommendation["recommendedImage"] = get_s3_image_url(image_url)
+
+            return [Recommendation(id=str(uuid.uuid4()), **rec) for rec in recommendations]
+        else:
+            # Randomly shuffle the recommendation categories based on max_recommendations
+            categories = random.sample(recommendation_categories, request.max_recommendations)
+            
+            # Generate recommendations for each category
+            recommendation_tasks = [
+                generate_batch_recommendations(
+                    client=client,
+                    location=request.location,
+                    keywords=request.keywords,
+                    archetypes=request.archetypes,
+                    category=category,
+                    model=request.model
+                )
+                for category in categories
+            ]
+            
+            if recommendation_tasks:
+                recommendations = await asyncio.gather(*recommendation_tasks, return_exceptions=True)
+                # Process results and filter out any errors
+                processed_recommendations = []
+                for i, result in enumerate(recommendations):
+                    if isinstance(result, Exception):
+                        logger.error(f"Error generating recommendations for category {categories[i]}: {result}")
+                    else:
+                        processed_recommendations.append(result[0])
+                
+                # Load cover images
+                cover_images = load_cover_images()
+
+                # Iterate through recommendations and add cover images using the value on the recommendedImage field
+                for recommendation in processed_recommendations:
+                    image_url = select_cover_image(cover_images, recommendation["recommendedImage"])
+                    recommendation["recommendedImage"] = get_s3_image_url(image_url)
+
+                return [Recommendation(id=str(uuid.uuid4()), **rec) for rec in processed_recommendations]
     except Exception as e:
         logger.error(f"Error generating recommendations: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))

@@ -1,9 +1,12 @@
 import asyncio
 from typing import List, Optional
 from celery import Task
+from celery.utils.log import get_task_logger
 from app.tasks.celery_app import celery_app
 from app.tasks.utils import get_db, run_async_recommendations, store_recommendations, get_user_by_id
 from app.schemas.users import Archetype, Keyword
+
+logger = get_task_logger(__name__)
 
 class BaseTaskWithRetry(Task):
     """Base task class with retry logic."""
@@ -12,7 +15,7 @@ class BaseTaskWithRetry(Task):
 
     def on_failure(self, exc, task_id, args, kwargs, einfo):
         """Log task failure using Celery's task logger."""
-        self.logger.error(
+        logger.error(
             "Task failed",
             exc_info=exc,
             extra={
@@ -37,7 +40,7 @@ def generate_user_recommendations(
     """
     Generate recommendations for a user based on their IP address.
     """
-    self.logger.info(
+    logger.info(
         "Starting user recommendations generation",
         extra={
             "user_id": user_id,
@@ -61,7 +64,7 @@ def generate_user_recommendations(
             recommendations_data=recommendations
         )
         
-        self.logger.info(
+        logger.info(
             "Successfully generated and stored recommendations",
             extra={
                 "user_id": user_id,
@@ -76,7 +79,7 @@ def generate_user_recommendations(
         }
         
     except Exception as e:
-        self.logger.error(
+        logger.error(
             "Error generating user recommendations",
             exc_info=e,
             extra={"user_id": user_id}
@@ -97,7 +100,7 @@ def generate_custom_recommendations(
     """
     Generate recommendations with custom parameters.
     """
-    self.logger.info(
+    logger.info(
         "Starting custom recommendations generation",
         extra={
             "user_id": user_id,
@@ -127,7 +130,7 @@ def generate_custom_recommendations(
             recommendations_data=recommendations
         )
         
-        self.logger.info(
+        logger.info(
             "Successfully generated and stored custom recommendations",
             extra={
                 "user_id": user_id,
@@ -142,7 +145,7 @@ def generate_custom_recommendations(
         }
         
     except Exception as e:
-        self.logger.error(
+        logger.error(
             "Error generating custom recommendations",
             exc_info=e,
             extra={"user_id": user_id}
