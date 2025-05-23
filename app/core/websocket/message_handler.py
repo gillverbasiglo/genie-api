@@ -249,6 +249,7 @@ class MessageHandler:
             user_id (str): ID of the user whose typing status is being updated
         """
         if user_id:
+            """
             await self.manager.send_typing_status(
                 messsage_data.get("receiver_id"),
                 {
@@ -258,6 +259,7 @@ class MessageHandler:
                     "is_typing": messsage_data.get("is_typing")
                 }
             )
+            """
         else:
             logger.warning(f"Typing status not sent")
             
