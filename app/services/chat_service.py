@@ -118,7 +118,7 @@ async def call_recommendation_api(
                     yield {prefix: content}"""
     async with httpx.AsyncClient(timeout=None) as client:
         response = await client.post(
-            "https://genesis-ehfyuaedu-genie-the-ai.vercel.app/api/search",
+            "https://genesis-engine.vercel.app/api/search",
             json=payload
         )
         response.raise_for_status()  # raise exception if the request failed
