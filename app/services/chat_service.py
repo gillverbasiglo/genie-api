@@ -7,10 +7,51 @@ from sqlalchemy.future import select
 from sqlalchemy import and_, or_
 from app.models.chat.private_chat_message import Message
 from sqlalchemy import func
+from app.models.device_token import DeviceToken
+from app.models.notifications import Notification
+from app.schemas.notifications import NotificationType
 from app.schemas.private_chat_message import MessageStatus
+from app.services.shared_content_service import send_push_notifications
 
 # Configure logger for this module
 logger = logging.getLogger(__name__)
+
+async def send_push_notification_for_offline_user(
+    receiver_id: str, db: AsyncSession, title: str, content: str
+):
+    
+    # Create notification for the recipient
+    notification = Notification(
+        user_id=receiver_id,
+        type=NotificationType.PRIVATE_CHAT_MESSAGE,
+        title=title,
+        message=content
+    )
+    db.add(notification)
+    await db.commit()
+    await db.refresh(notification)
+
+    # Send push notification for offline users
+    stmt = select(DeviceToken).where(
+        DeviceToken.is_active == True,
+        DeviceToken.user_id == receiver_id,
+        DeviceToken.platform == "ios"
+    )
+    device_tokens_result = await db.execute(stmt)
+    device_tokens = device_tokens_result.scalars().all()
+
+    if not device_tokens:
+        logger.info(f"No active iOS device tokens found for user {receiver_id}")
+
+    logger.info(f"Sending push notification: {notification}")
+
+    try:
+        notification_responses = await send_push_notifications(device_tokens, notification)
+        logger.info(f"Push notifications sent: {len(notification_responses)} responses")
+        logger.info(f"Push notifications responses: {notification_responses}")
+    except Exception as e:
+        logger.exception("Error while sending push notifications.")
+        notification_responses = []
 
 async def get_paginated_private_messages(
     db: AsyncSession,

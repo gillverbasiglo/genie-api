@@ -3,13 +3,13 @@ import uuid
 from typing import Callable, Dict, List, Union
 
 from sqlalchemy import select
+from app.core.websocket.websocket_manager import ConnectionManager
 from app.models.chat.private_chat_message import Message
 from app.schemas.websocket import WebSocketMessageType
 from app.schemas.private_chat_message import MessageStatus, MessageType
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime
-from app.services.chat_service import call_recommendation_api
-from app.services.friends_service import are_friends
+from app.services.chat_service import call_recommendation_api, send_push_notification_for_offline_user
 
 # Set up the logger
 logger = logging.getLogger(__name__)
@@ -19,7 +19,7 @@ class MessageHandler:
     Handles different types of WebSocket messages and manages real-time communication.
     """
 
-    def __init__(self, db: AsyncSession, manager):
+    def __init__(self, db: AsyncSession, manager: ConnectionManager):
         """
         Initialize the MessageHandler with database session and WebSocket manager.
 
@@ -174,20 +174,28 @@ class MessageHandler:
         # Convert timestamp to ISO format for JSON serialization
         timestamp_str = timestamp.isoformat()
 
-        # Forward message to receiver
-        logger.info(f"Sending message to {receiver_id}: {content}")
-        await self.manager.send_personal_message(
-            receiver_id,
-            {
-                "type": WebSocketMessageType.PRIVATE_CHAT_MESSAGE, 
-                "id": new_message.id, 
-                "sender_id": user_id, 
-                "receiver_id": receiver_id,
-                "content": content, 
-                "status": MessageStatus.SENT, 
-                "timestamp": timestamp_str
-            }
-        )
+        message_dict = {
+            "type":  WebSocketMessageType.PRIVATE_CHAT_MESSAGE, 
+            "id": new_message.id, 
+            "sender_id": user_id, 
+            "receiver_id": receiver_id,
+            "content": content, 
+            "status": MessageStatus.SENT, 
+            "timestamp": timestamp_str
+        }
+
+        # Handle real-time notification delivery
+        is_user_online = self.manager.is_user_online(receiver_id)
+        logger.info(f"Recipient user online: {is_user_online}")
+
+        if is_user_online:
+            await self.manager.send_personal_message(
+                        receiver_id,
+                        message_dict
+                    )
+        else:
+            await send_push_notification_for_offline_user(receiver_id, self.db, "New Message", content)
+
         
     async def handle_message_status_update(self, message_data: dict, user_id: str):
         """
