@@ -106,7 +106,7 @@ class MessageHandler:
             })
             await self.manager.send_personal_message(user_2_id, {
                 "type": WebSocketMessageType.CHAT_GENIE_SUMMON,
-                "message": result
+                "message": structured_result
             })
 
         except Exception as e:
