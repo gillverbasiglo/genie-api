@@ -10,6 +10,7 @@ class NotificationType(str, PyEnum):
     COMMENT = "comment"
     FOLLOW = "follow"
     FRIEND_REQUEST = "friend_request"
+    PRIVATE_CHAT_MESSAGE = "private_chat_message"
 
 class NotificationBase(BaseModel):
     type: NotificationType
