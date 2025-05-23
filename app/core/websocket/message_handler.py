@@ -35,7 +35,8 @@ class MessageHandler:
             WebSocketMessageType.MESSAGE_UPDATE: self.handle_message_status_update,
             WebSocketMessageType.TYPING_STATUS: self.handle_typing_status,
             WebSocketMessageType.USER_STATUS: self.handle_user_status,
-            WebSocketMessageType.CHAT_GENIE_SUMMON: self.handle_chat_genie_summon
+            WebSocketMessageType.CHAT_GENIE_SUMMON: self.handle_chat_genie_summon,
+            WebSocketMessageType.CHAT_GENIE_SUMMON_IOS: self.handle_chat_genie_summon_ios
         }
 
     async def handle_message(self, message_data: dict, user_id: str):
@@ -99,6 +100,7 @@ class MessageHandler:
             })"""
         try:
             result = await call_recommendation_api(self.db, user_1_id, user_2_id, query)
+            logger.info(f"Result: {result}")
             structured_result = self.extract_result_only(result)
             await self.manager.send_personal_message(user_1_id, {
                 "type": WebSocketMessageType.CHAT_GENIE_SUMMON,
@@ -119,6 +121,20 @@ class MessageHandler:
                 "type": "ERROR",
                 "message": "Failed to get response from genie."
             })
+
+
+    async def handle_chat_genie_summon_ios(self, message_data: dict, user_id: str):
+        receiver_id = message_data.get("receiver_id")
+        message = message_data.get("message")
+        logger.info("handle_chat_genie_summon_ios")
+        logger.info(f"Message: {message}")
+
+        await self.manager.send_personal_message(receiver_id, {
+                "type": WebSocketMessageType.CHAT_GENIE_SUMMON_IOS,
+                "message": message
+            })
+
+        
 
     async def handle_private_chat_message(self, message_data: dict, user_id: str):
         """
