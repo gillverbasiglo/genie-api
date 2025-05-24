@@ -57,7 +57,7 @@ async def websocket_endpoint(
             # Main message processing loop
             while True:
                 message_data = await websocket.receive_json()
-                logger.info(f"message_data: {message_data}")
+                logger.info(f"Message type: {message_data.get('type')}")
                 
                 # Process the received message
                 await message_handler.handle_message(message_data, user_id)
