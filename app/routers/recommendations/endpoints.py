@@ -12,6 +12,7 @@ from openai import AsyncOpenAI
 from pydantic import BaseModel
 from sqlalchemy import select, update, func
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 from typing import Optional
 from enum import Enum
 from tenacity import retry, stop_after_attempt, wait_exponential
@@ -544,24 +545,54 @@ async def get_friend_portal_recommendations(
         raise HTTPException(status_code=400, detail="Friend archetypes not found")
     
     try:
-        common_archetypes = find_common_archetypes(user.archetypes, friend.archetypes)
-        recommendations = await generate_friend_portal_recommendations(
-            client=groq_client if request.provider == "groq" else openai_client,
-            location=request.location,
-            archetypes=", ".join(common_archetypes),
-            user_name=user.display_name,
-            friend_name=friend.display_name,
-            model=request.model
+        # TODO: Add again this once we have a better solution to generate common recommendations
+        # common_archetypes = find_common_archetypes(user.archetypes, friend.archetypes)
+        # recommendations = await generate_friend_portal_recommendations(
+        #     client=groq_client if request.provider == "groq" else openai_client,
+        #     location=request.location,
+        #     archetypes=", ".join(common_archetypes),
+        #     user_name=user.display_name,
+        #     friend_name=friend.display_name,
+        #     model=request.model
+        # )
+
+        # # Load cover images
+        # cover_images = load_cover_images()
+
+        # # Iterate through recommendations and add cover images using the value on the image field
+        # for recommendation in recommendations["recommendations"]:
+        #     image_category = recommendation["image"]
+        #     image_url = select_cover_image(cover_images, image_category)
+        #     recommendation["image"] = get_s3_image_url(image_url)
+
+        recommendations = []
+        # Extract recommendations from UserRecommendation table with eager loading
+        query = (
+            select(UserRecommendation)
+            .options(selectinload(UserRecommendation.recommendation))
+            .where(UserRecommendation.user_id == friend_id)
         )
-
-        # Load cover images
-        cover_images = load_cover_images()
-
-        # Iterate through recommendations and add cover images using the value on the image field
-        for recommendation in recommendations["recommendations"]:
-            image_category = recommendation["image"]
-            image_url = select_cover_image(cover_images, image_category)
-            recommendation["image"] = get_s3_image_url(image_url)
+        result = await db.execute(query)
+        user_recommendations = result.scalars().all()  # Use scalars() to get UserRecommendation objects directly
+        
+        for user_recommendation in user_recommendations:
+            if not user_recommendation.recommendation:  # Skip if recommendation is None
+                continue
+                
+            # Safely get place_details description
+            place_details = user_recommendation.recommendation.place_details or {}
+            practical_tips = place_details.get("description", "")
+            
+            recommendation = {
+                "title": user_recommendation.recommendation.search_query,
+                "description": user_recommendation.recommendation.prompt,
+                "practical_tips": practical_tips,
+                "searchQuery": user_recommendation.recommendation.search_query,
+                "keywords": user_recommendation.recommendation.keywords or [],
+                "archetypes": user_recommendation.recommendation.archetypes or [],
+                "image": user_recommendation.recommendation.image_url,
+            }
+            recommendations.append(recommendation)
 
         return recommendations
     except Exception as e:
