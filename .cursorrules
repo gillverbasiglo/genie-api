@@ -10,6 +10,7 @@
   - Favor named exports for routes and utility functions.
   - Use the Receive an Object, Return an Object (RORO) pattern.
   - Make surgical changes to the codebase.
+  - Don't randomly remove comments when you edit related code.
   
   Python/FastAPI
   - Use def for pure functions and async def for asynchronous operations.
@@ -33,7 +34,7 @@
   - FastAPI
   - Pydantic v2
   - Psycopg3
-  - SQLAlchemy 2.0 (if using ORM features)
+  - SQLAlchemy 2.0
   - Alembic
   
   FastAPI-Specific Guidelines
