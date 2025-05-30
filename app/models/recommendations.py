@@ -1,7 +1,8 @@
 from sqlalchemy import Column, Integer, String, Boolean, Float, DateTime, ForeignKey, Text, Table
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import JSONB, ARRAY
-from datetime import datetime
+from datetime import datetime, timezone
+from geoalchemy2 import Geometry
 
 from app.database import Base
 
@@ -17,6 +18,9 @@ class Recommendation(Base):
     
     # Place details as JSONB - includes all TripAdvisor or Google Places data
     place_details = Column(JSONB, nullable=True)
+    
+    # Spatial data for location-based queries
+    location_geom = Column(Geometry('POINT', srid=4326, spatial_index=True), nullable=True)
     
     # Recommendation metadata - useful for AI learning
     archetypes = Column(ARRAY(String), nullable=True)  # e.g., ['foodie', 'cultural explorer']
@@ -34,8 +38,8 @@ class Recommendation(Base):
     search_vector = Column(Text, nullable=True)  # Add a trigger for full-text search
     
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=datetime.now(timezone.utc), onupdate=datetime.now(timezone.utc))
     
     # Relationships
     user_recommendations = relationship("UserRecommendation", back_populates="recommendation")

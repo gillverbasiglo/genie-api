@@ -3,24 +3,28 @@ import json
 import logging
 import uuid
 import random
-from typing import List, Union
+
+from typing import List, Union, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Path, status, Response
 from fastapi_cache.decorator import cache
 from google import genai
 from openai import AsyncOpenAI
 from pydantic import BaseModel
-from sqlalchemy import select, update
+from sqlalchemy import select, update, func
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 from typing import Optional
 from enum import Enum
 from tenacity import retry, stop_after_attempt, wait_exponential
 from datetime import datetime, timezone
+from geopy.geocoders import Nominatim
+from geopy.exc import GeocoderTimedOut, GeocoderServiceError
+from shapely.geometry import Point
+from geoalchemy2 import Geometry
 
 from app.common import get_current_user
 from app.config import settings
 from app.init_db import get_db
-from app.models import User, UserRecommendation
+from app.models import User, UserRecommendation, Recommendation
 from app.services import get_user_by_id, find_common_archetypes, load_cover_images, select_cover_image, get_s3_image_url
 from app.tasks import generate_custom_recommendations
 
@@ -48,7 +52,7 @@ class RecommendationRequest(BaseModel):
     max_recommendations: int = 5
     user_prompt: Optional[str] = None
 
-class Recommendation(BaseModel):
+class RecommendationResponse(BaseModel):
     """
     A recommendation is a personalized travel recommendation for a user.
     """
@@ -141,6 +145,9 @@ FUNCTION_SCHEMA = {
     }
 }
 
+# Initialize geocoder
+geocoder = Nominatim(user_agent="genie-backend")
+
 @router.post("/generate")
 async def generate_recommendations(
     request: RecommendationRequest,
@@ -199,7 +206,7 @@ async def generate_recommendations_legacy(
                 image_url = select_cover_image(cover_images, recommendation["recommendedImage"])
                 recommendation["recommendedImage"] = get_s3_image_url(image_url)
 
-            return [Recommendation(id=str(uuid.uuid4()), **rec) for rec in recommendations]
+            return [RecommendationResponse(id=str(uuid.uuid4()), **rec) for rec in recommendations]
         else:
             # Randomly shuffle the recommendation categories based on max_recommendations
             categories = random.sample(recommendation_categories, request.max_recommendations)
@@ -235,7 +242,7 @@ async def generate_recommendations_legacy(
                     image_url = select_cover_image(cover_images, recommendation["recommendedImage"])
                     recommendation["recommendedImage"] = get_s3_image_url(image_url)
 
-                return [Recommendation(id=str(uuid.uuid4()), **rec) for rec in processed_recommendations]
+                return [RecommendationResponse(id=str(uuid.uuid4()), **rec) for rec in processed_recommendations]
     except Exception as e:
         logger.error(f"Error generating recommendations: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -565,52 +572,132 @@ async def get_friend_portal_recommendations(
 async def get_user_recommendations(
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(25, ge=1, le=100, description="Number of records to return"),
+    location: Optional[str] = Query(None, description="Address to search near (e.g., '3633 Red Sage Way N, Frederick, Maryland')"),
+    radius_km: Optional[float] = Query(50.0, ge=0.1, le=50.0, description="Search radius in kilometers (max 50km)"),
+    time_of_day: Optional[str] = Query(None, description="Filter recommendations by time of day (morning, afternoon, evening, night)"),
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
-    """
-    Get unseen recommendations for the current user.
-    
-    Args:
-        skip: Number of records to skip (pagination)
-        limit: Maximum number of records to return
-        db: Database session
-        current_user: Currently authenticated user
-        
-    Returns:
-        List of unseen recommendations
-    """
     try:
-        # Query user recommendations with unseen filter and eager loading of recommendation
+        # Build base query with join to recommendations table
         query = (
-            select(UserRecommendation)
-            .options(selectinload(UserRecommendation.recommendation))
+            select(
+                UserRecommendation,
+                Recommendation.id,
+                Recommendation.category,
+                Recommendation.prompt,
+                Recommendation.search_query,
+                Recommendation.place_details,
+                Recommendation.archetypes,
+                Recommendation.keywords,
+                Recommendation.image_url,
+                Recommendation.location_geom,
+                func.ST_Distance(
+                    Recommendation.location_geom,
+                    func.ST_GeomFromEWKT('SRID=4326;POINT(0 0)')
+                ).label('distance') if location else None
+            )
+            .join(Recommendation, UserRecommendation.recommendation_id == Recommendation.id)
             .where(
                 UserRecommendation.user_id == current_user["uid"],
                 UserRecommendation.is_seen == False
             )
-            .offset(skip)
-            .limit(limit)
         )
         
-        result = await db.execute(query)
-        user_recommendations = result.scalars().all()
+        # Handle location-based search if provided
+        if location:
+            try:
+                # Geocode the address
+                location_data = geocoder.geocode(location)
+                if not location_data:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Could not geocode the provided address"
+                    )
+                
+                # Create a point from the geocoded coordinates
+                user_point = Point(location_data.longitude, location_data.latitude)
+                
+                # Create WKT representation of the point
+                point_wkt = f'SRID=4326;POINT({user_point.x} {user_point.y})'
+                
+                # Update the query with the WKT point
+                query = (
+                    select(
+                        UserRecommendation,
+                        Recommendation.id,
+                        Recommendation.category,
+                        Recommendation.prompt,
+                        Recommendation.search_query,
+                        Recommendation.place_details,
+                        Recommendation.archetypes,
+                        Recommendation.keywords,
+                        Recommendation.image_url,
+                        Recommendation.location_geom,
+                        func.ST_Distance(
+                            Recommendation.location_geom,
+                            func.ST_GeomFromEWKT(point_wkt)
+                        ).label('distance')
+                    )
+                    .join(Recommendation, UserRecommendation.recommendation_id == Recommendation.id)
+                    .where(
+                        UserRecommendation.user_id == current_user["uid"],
+                        UserRecommendation.is_seen == False,
+                        func.ST_DWithin(
+                            Recommendation.location_geom,
+                            func.ST_GeomFromEWKT(point_wkt),
+                            radius_km * 1000  # Convert km to meters
+                        )
+                    )
+                )
+                
+            except (GeocoderTimedOut, GeocoderServiceError) as e:
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Geocoding service temporarily unavailable"
+                )
+            
+        # Add time_of_day filter if provided
+        # TODO: ignore this for now until we have a way to filter by time of day
+        # if time_of_day:
+        #     if time_of_day not in ["morning", "afternoon", "evening", "night"]:
+        #         raise HTTPException(
+        #             status_code=status.HTTP_400_BAD_REQUEST,
+        #             detail="time_of_day must be one of: morning, afternoon, evening, night"
+        #         )
+        #     query = query.where(Recommendation.__table__.c.time_of_day == time_of_day)
         
-        # Return only the recommendation data
-        return [
-            {
-                "id": rec.recommendation.id,
-                "category": rec.recommendation.category,
-                "prompt": rec.recommendation.prompt,
-                "searchQuery": rec.recommendation.search_query,
-                "placeDetails": rec.recommendation.place_details,
-                "recommendedImage": rec.recommendation.image_url,
-                "usedArchetypes": rec.recommendation.archetypes,
-                "usedKeywords": rec.recommendation.keywords
+        # Add pagination
+        query = query.offset(skip).limit(limit)
+        print(query)
+        result = await db.execute(query)
+        print(result)
+        results = result.all()
+        
+        # Process the results
+        recommendations = []
+        for row in results:
+            user_rec, rec_id, category, prompt, search_query, place_details, archetypes, keywords, image_url, location_geom, distance = row
+            
+            recommendation_data = {
+                "id": rec_id,
+                "category": category,
+                "prompt": prompt,
+                "searchQuery": search_query,
+                "placeDetails": place_details,
+                "recommendedImage": image_url,
+                "usedArchetypes": archetypes,
+                "usedKeywords": keywords,
             }
-            for rec in user_recommendations
-            if rec.recommendation  # Ensure recommendation exists
-        ]
+            
+            # Add distance if location search was used
+            if location and distance is not None:
+                recommendation_data["distance_km"] = round(distance / 1000, 2)  # Convert meters to kilometers
+                
+            recommendations.append(recommendation_data)
+        
+        return recommendations
+        
     except Exception as e:
         logger.error(f"Error fetching user recommendations: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
