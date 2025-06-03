@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 class Mem0Manager:
     def __init__(self):
-        self.client = AsyncMemoryClient(api_key=settings.MEM0_API_KEY.get_secret_value())
+        self.client = AsyncMemoryClient(api_key=settings.mem0_api_key.get_secret_value())
 
     async def store_private_message(
         self,
