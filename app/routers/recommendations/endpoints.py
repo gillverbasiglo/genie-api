@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Path, status, Resp
 from fastapi_cache.decorator import cache
 from google import genai
 from openai import AsyncOpenAI
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select, update, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -603,13 +603,21 @@ async def get_friend_portal_recommendations(
 async def get_user_recommendations(
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(25, ge=1, le=100, description="Number of records to return"),
-    location: Optional[str] = Query(None, description="Address to search near (e.g., '3633 Red Sage Way N, Frederick, Maryland')"),
+    latitude: Optional[float] = Query(None, ge=-90, le=90, description="Latitude in decimal degrees"),
+    longitude: Optional[float] = Query(None, ge=-180, le=180, description="Longitude in decimal degrees"),
     radius_km: Optional[float] = Query(50.0, ge=0.1, le=50.0, description="Search radius in kilometers (max 50km)"),
     time_of_day: Optional[str] = Query(None, description="Filter recommendations by time of day (morning, afternoon, evening, night)"),
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
     try:
+        # Validate that both latitude and longitude are provided if either is present
+        if (latitude is None) != (longitude is None):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Both latitude and longitude must be provided together"
+            )
+
         # Build base query with join to recommendations table
         query = (
             select(
@@ -626,7 +634,7 @@ async def get_user_recommendations(
                 func.ST_Distance(
                     Recommendation.location_geom,
                     func.ST_GeomFromEWKT('SRID=4326;POINT(0 0)')
-                ).label('distance') if location else None
+                ).label('distance') if latitude and longitude else None
             )
             .join(Recommendation, UserRecommendation.recommendation_id == Recommendation.id)
             .where(
@@ -635,59 +643,41 @@ async def get_user_recommendations(
             )
         )
         
-        # Handle location-based search if provided
-        if location:
-            try:
-                # Geocode the address
-                location_data = geocoder.geocode(location)
-                if not location_data:
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        detail="Could not geocode the provided address"
-                    )
-                
-                # Create a point from the geocoded coordinates
-                user_point = Point(location_data.longitude, location_data.latitude)
-                
-                # Create WKT representation of the point
-                point_wkt = f'SRID=4326;POINT({user_point.x} {user_point.y})'
-                
-                # Update the query with the WKT point
-                query = (
-                    select(
-                        UserRecommendation,
-                        Recommendation.id,
-                        Recommendation.category,
-                        Recommendation.prompt,
-                        Recommendation.search_query,
-                        Recommendation.place_details,
-                        Recommendation.archetypes,
-                        Recommendation.keywords,
-                        Recommendation.image_url,
-                        Recommendation.location_geom,
-                        func.ST_Distance(
-                            Recommendation.location_geom,
-                            func.ST_GeomFromEWKT(point_wkt)
-                        ).label('distance')
-                    )
-                    .join(Recommendation, UserRecommendation.recommendation_id == Recommendation.id)
-                    .where(
-                        UserRecommendation.user_id == current_user["uid"],
-                        UserRecommendation.is_seen == False,
-                        func.ST_DWithin(
-                            Recommendation.location_geom,
-                            func.ST_GeomFromEWKT(point_wkt),
-                            radius_km * 1000  # Convert km to meters
-                        )
-                    )
-                )
-                
-            except (GeocoderTimedOut, GeocoderServiceError) as e:
-                raise HTTPException(
-                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                    detail="Geocoding service temporarily unavailable"
-                )
+        # Handle location-based search if coordinates are provided
+        if latitude is not None and longitude is not None:
+            # Create WKT representation of the point
+            point_wkt = f'SRID=4326;POINT({longitude} {latitude})'
             
+            # Update the query with the WKT point
+            query = (
+                select(
+                    UserRecommendation,
+                    Recommendation.id,
+                    Recommendation.category,
+                    Recommendation.prompt,
+                    Recommendation.search_query,
+                    Recommendation.place_details,
+                    Recommendation.archetypes,
+                    Recommendation.keywords,
+                    Recommendation.image_url,
+                    Recommendation.location_geom,
+                    func.ST_Distance(
+                        Recommendation.location_geom,
+                        func.ST_GeomFromEWKT(point_wkt)
+                    ).label('distance')
+                )
+                .join(Recommendation, UserRecommendation.recommendation_id == Recommendation.id)
+                .where(
+                    UserRecommendation.user_id == current_user["uid"],
+                    UserRecommendation.is_seen == False,
+                    func.ST_DWithin(
+                        Recommendation.location_geom,
+                        func.ST_GeomFromEWKT(point_wkt),
+                        radius_km * 1000  # Convert km to meters
+                    )
+                )
+            )
+        
         # Add time_of_day filter if provided
         # TODO: ignore this for now until we have a way to filter by time of day
         # if time_of_day:
@@ -722,7 +712,7 @@ async def get_user_recommendations(
             }
             
             # Add distance if location search was used
-            if location and distance is not None:
+            if latitude is not None and longitude is not None and distance is not None:
                 recommendation_data["distance_km"] = round(distance / 1000, 2)  # Convert meters to kilometers
                 
             recommendations.append(recommendation_data)
