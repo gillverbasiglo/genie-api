@@ -22,7 +22,7 @@ from app.routers.users.endpoints import router as UserAndContacts
 from app.routers.websocket.endpoints import router as WebSocketEndpoints
 from app.routers.chat.endpoints import router as ChatEndPoints
 from app.routers.notifications.endpoints import router as NotificationsEndpoints
-
+from app.routers.mem0.endpoints import router as MemoriesEndpoints
 logger = logging.getLogger(__name__)
 
 # Cache the JWKS for 1 hour to avoid fetching it on every request
@@ -42,6 +42,7 @@ app.include_router(UserAndContacts)
 app.include_router(WebSocketEndpoints)
 app.include_router(ChatEndPoints)
 app.include_router(NotificationsEndpoints)
+app.include_router(MemoriesEndpoints)
 
 # Global clients
 groq_client = AsyncOpenAI(
