@@ -717,7 +717,7 @@ async def get_user_recommendations(
                 
             recommendations.append(recommendation_data)
         
-        return recommendations
+        return {"recommendations": recommendations}
         
     except Exception as e:
         logger.error(f"Error fetching user recommendations: {str(e)}")
