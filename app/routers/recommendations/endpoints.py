@@ -594,7 +594,7 @@ async def get_friend_portal_recommendations(
             }
             recommendations.append(recommendation)
 
-        return recommendations
+        return {"recommendations": recommendations}
     except Exception as e:
         logger.error(f"Error finding common archetypes: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -717,7 +717,7 @@ async def get_user_recommendations(
                 
             recommendations.append(recommendation_data)
         
-        return {"recommendations": recommendations}
+        return recommendations
         
     except Exception as e:
         logger.error(f"Error fetching user recommendations: {str(e)}")
