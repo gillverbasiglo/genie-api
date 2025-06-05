@@ -517,8 +517,16 @@ class FriendPortalRecommendationRequest(BaseModel):
     model: str = "Llama3-8b-8192"
     provider: str = "groq"
     max_recommendations: int = 3
+    skip: int = Query(0, ge=0, description="Number of records to skip")
+    limit: int = Query(100, ge=1, le=100, description="Number of records to return")
 
-@router.post("/friends/{friend_id}/portal", response_model=None)
+class PaginatedRecommendationResponse(BaseModel):
+    recommendations: List[dict]
+    total: int
+    skip: int
+    limit: int
+
+@router.post("/friends/{friend_id}/portal", response_model=PaginatedRecommendationResponse)
 async def get_friend_portal_recommendations(
     friend_id: str,
     request: FriendPortalRecommendationRequest,
@@ -545,36 +553,27 @@ async def get_friend_portal_recommendations(
         raise HTTPException(status_code=400, detail="Friend archetypes not found")
     
     try:
-        # TODO: Add again this once we have a better solution to generate common recommendations
-        # common_archetypes = find_common_archetypes(user.archetypes, friend.archetypes)
-        # recommendations = await generate_friend_portal_recommendations(
-        #     client=groq_client if request.provider == "groq" else openai_client,
-        #     location=request.location,
-        #     archetypes=", ".join(common_archetypes),
-        #     user_name=user.display_name,
-        #     friend_name=friend.display_name,
-        #     model=request.model
-        # )
+        # Get total count of recommendations
+        count_query = (
+            select(func.count())
+            .select_from(UserRecommendation)
+            .where(UserRecommendation.user_id == friend_id)
+        )
+        total_count = await db.scalar(count_query)
 
-        # # Load cover images
-        # cover_images = load_cover_images()
-
-        # # Iterate through recommendations and add cover images using the value on the image field
-        # for recommendation in recommendations["recommendations"]:
-        #     image_category = recommendation["image"]
-        #     image_url = select_cover_image(cover_images, image_category)
-        #     recommendation["image"] = get_s3_image_url(image_url)
-
-        recommendations = []
         # Extract recommendations from UserRecommendation table with eager loading
         query = (
             select(UserRecommendation)
             .options(selectinload(UserRecommendation.recommendation))
             .where(UserRecommendation.user_id == friend_id)
+            .order_by(UserRecommendation.created_at.desc())  # Order by creation date, newest first
+            .offset(request.skip)
+            .limit(request.limit)
         )
         result = await db.execute(query)
-        user_recommendations = result.scalars().all()  # Use scalars() to get UserRecommendation objects directly
+        user_recommendations = result.scalars().all()
         
+        recommendations = []
         for user_recommendation in user_recommendations:
             if not user_recommendation.recommendation:  # Skip if recommendation is None
                 continue
@@ -592,10 +591,16 @@ async def get_friend_portal_recommendations(
                 "archetypes": user_recommendation.recommendation.archetypes or [],
                 "image": user_recommendation.recommendation.image_url,
                 "placeDetails": user_recommendation.recommendation.place_details,
+                "created_at": user_recommendation.created_at.isoformat() if user_recommendation.created_at else None,
             }
             recommendations.append(recommendation)
 
-        return {"recommendations": recommendations}
+        return {
+            "recommendations": recommendations,
+            "total": total_count,
+            "skip": request.skip,
+            "limit": request.limit
+        }
     except Exception as e:
         logger.error(f"Error finding common archetypes: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
