@@ -146,7 +146,7 @@ async def stream_genie_recommendations(
                         # Handle different types of stream parts
                         if part.type == "a":  # Tool result part
                             # Extract the structured output from the tool result
-                            if "result" in part.content and part.content["result"] is not None and "recommendations" in part.content["result"]:
+                            if "result" in part.content and part.content["result"] is not None and "structuredResults" in part.content["result"]:
                                 yield part.content["result"]
                         elif part.type == "3":  # Error part
                             raise Exception(f"AI Service Error: {part.content}")
