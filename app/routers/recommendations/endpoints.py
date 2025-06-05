@@ -591,6 +591,7 @@ async def get_friend_portal_recommendations(
                 "keywords": user_recommendation.recommendation.keywords or [],
                 "archetypes": user_recommendation.recommendation.archetypes or [],
                 "image": user_recommendation.recommendation.image_url,
+                "placeDetails": user_recommendation.recommendation.place_details,
             }
             recommendations.append(recommendation)
 
