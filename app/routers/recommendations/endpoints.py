@@ -44,7 +44,7 @@ class Provider(str, Enum):
 
 # Define the Recommendation model
 class RecommendationRequest(BaseModel):
-    location: str
+    location: Optional[str] = None
     time_of_day: Optional[str] = None
     provider: Provider = Provider.GROQ
     model: str = "llama-3.1-8b-instant"
@@ -52,6 +52,9 @@ class RecommendationRequest(BaseModel):
     keywords: Optional[str] = None
     max_recommendations: int = 5
     user_prompt: Optional[str] = None
+    neighborhood: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
 
 class RecommendationResponse(BaseModel):
     """
@@ -159,7 +162,9 @@ async def generate_recommendations(
         if request.time_of_day and request.time_of_day in ["morning", "afternoon", "evening", "night"]:
             generate_custom_recommendations.delay(
                 user_id=current_user["uid"],
-                location=request.location,
+                neighborhood=request.neighborhood,
+                latitude=request.latitude,
+                longitude=request.longitude,
                 time_of_day=request.time_of_day,
             )
 

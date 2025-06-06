@@ -7,18 +7,30 @@ from typing import Dict, Any, AsyncGenerator, Optional, List
 
 from app.schemas.users import Archetype, Keyword
 from app.config import settings
+
 @dataclass
 class Location:
     country: str
     city: str
+    state: str
     latitude: float
     longitude: float
     timezone: str
 
+class MessagePart(BaseModel):
+    type: str
+    text: str
+
+class Message(BaseModel):
+    role: str
+    parts: List[MessagePart]
+
 class GenieAIRequest(BaseModel):
     model: str
     group: str
-    user_data: Dict[str, Any]
+    coordinates: Dict[str, Any]
+    messages: List[Message]
+    neighborhood: str
 
 class StreamPart(BaseModel):
     type: str
@@ -47,6 +59,7 @@ async def get_location_from_ip(ip_address: str) -> Optional[Location]:
             return Location(
                 country=data.get("country_name", ""),
                 city=data.get("city", ""),
+                state=data.get("region", ""),
                 latitude=float(data.get("latitude", 0)),
                 longitude=float(data.get("longitude", 0)),
                 timezone=data.get("timezone", "")
@@ -72,9 +85,10 @@ async def parse_stream_part(line: str) -> Optional[StreamPart]:
 
 async def stream_genie_recommendations(
     time_of_day: str,
-    archetypes: Optional[List[Archetype]] = None,
-    keywords: Optional[List[Keyword]] = None,
-    location: Optional[str] = None,
+    prompt: str,
+    neighborhood: Optional[str] = None,
+    latitude: Optional[float] = None,
+    longitude: Optional[float] = None,
     ip_address: Optional[str] = None,
 ) -> AsyncGenerator[Dict[str, Any], None]:
     """
@@ -95,34 +109,22 @@ async def stream_genie_recommendations(
     if ip_address:
         # Get location information from IP
         location = await get_location_from_ip(ip_address)
-        print(location)
-        # Create user data with location information
-        user_data = {}
-        if location:
-            user_data.update({
-                "location": f"{location.city}, {location.country}",
-                "time_of_day": time_of_day
-            })
-    else:
-        user_data = {
-            "location": location,
-            "time_of_day": time_of_day
-        }
-
-    if archetypes:
-        user_data.update({
-            "archetypes": archetypes
-        })
-    
-    if keywords:
-        user_data.update({
-            "preferences": keywords
-        })
+        # Create populated neighborhood, latitude, and longitude with location information
+        neighborhood = location.state
+        latitude = location.latitude
+        longitude = location.longitude
     
     request_data = GenieAIRequest(
         model="genie-gemini",
-        group="recommendations",
-        user_data=user_data
+        group="web",
+        neighborhood=neighborhood,
+        coordinates={
+            "lat": latitude,
+            "lon": longitude
+        },
+        messages=[
+            Message(role="user", parts=[MessagePart(type="text", text=prompt)])
+        ]
     )
     
     headers = {
@@ -146,7 +148,7 @@ async def stream_genie_recommendations(
                         # Handle different types of stream parts
                         if part.type == "a":  # Tool result part
                             # Extract the structured output from the tool result
-                            if "result" in part.content and part.content["result"] is not None and "recommendations" in part.content["result"]:
+                            if "result" in part.content and part.content["result"] is not None and "structuredResults" in part.content["result"]:
                                 yield part.content["result"]
                         elif part.type == "3":  # Error part
                             raise Exception(f"AI Service Error: {part.content}")

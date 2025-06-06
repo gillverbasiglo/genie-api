@@ -20,9 +20,10 @@ def get_db() -> Session:
 
 async def run_async_recommendations(
     time_of_day: str,
-    archetypes: Optional[List[Archetype]] = None,
-    keywords: Optional[List[Keyword]] = None,
-    location: Optional[str] = None,
+    prompt: str,
+    neighborhood: Optional[str] = None,
+    latitude: Optional[float] = None,
+    longitude: Optional[float] = None,
     ip_address: Optional[str] = None,
 ) -> List[dict]:
     """
@@ -32,9 +33,10 @@ async def run_async_recommendations(
     try:
         async for recommendation in stream_genie_recommendations(
             time_of_day=time_of_day,
-            archetypes=archetypes,
-            keywords=keywords,
-            location=location,
+            prompt=prompt,
+            neighborhood=neighborhood,
+            latitude=latitude,
+            longitude=longitude,
             ip_address=ip_address,
         ):
             recommendations.append(recommendation)
@@ -53,35 +55,42 @@ def store_recommendations(
     """
     try:
         stored_recommendations = []
-        print(f"Storing recommendations for user {user_id}, recommendations: {recommendations_data}")
         recommendations_result = recommendations_data[0]
-        recommendations = recommendations_result["recommendations"]
+        recommendations = recommendations_result["structuredResults"]
         
         for rec_data in recommendations:
-            # Create recommendation
-            recommendation = Recommendation(
-                category=rec_data.get("category", "general"),
-                prompt=rec_data.get("prompt", ""),
-                search_query=rec_data.get("searchQuery"),
-                place_details=rec_data.get("placeDetails", {}),
-                archetypes=rec_data.get("usedArchetypes", []),
-                keywords=rec_data.get("usedKeywords", []),
-                image_concept=rec_data.get("recommendedImageConcept"),
-                image_url=rec_data.get("recommendedImage"),
-                source=rec_data.get("source", "genie-ai"),
-                external_id=rec_data.get("external_id")
-            )
-            db.add(recommendation)
-            db.flush()  # Get the ID without committing
+            places_data = rec_data.get("places", [])
+            place_data = places_data[0] if places_data else {}
+            if 'photos' in place_data:
+                picture_url = place_data['photos'][0]['medium']
+            else:
+                picture_url = None
             
-            # Create user recommendation link
-            user_recommendation = UserRecommendation(
-                user_id=user_id,
-                recommendation_id=recommendation.id,
-                is_seen=False
-            )
-            db.add(user_recommendation)
-            stored_recommendations.append(recommendation)
+            if 'name' in place_data and rec_data.get("llmDescription") != "N/A":
+                # Create recommendation
+                recommendation = Recommendation(
+                    category=place_data.get("category", "general"),
+                    prompt=rec_data.get("llmDescription", ""),
+                    search_query=rec_data.get("name"),
+                    place_details=place_data,
+                    archetypes=rec_data.get("usedArchetypes", []),
+                    keywords=rec_data.get("usedKeywords", []),
+                    image_concept=rec_data.get("recommendedImageConcept"),
+                    image_url=picture_url,
+                    source=rec_data.get("source", "genie-ai"),
+                    external_id=rec_data.get("external_id")
+                )
+                db.add(recommendation)
+                db.flush()  # Get the ID without committing
+                
+                # Create user recommendation link
+                user_recommendation = UserRecommendation(
+                    user_id=user_id,
+                    recommendation_id=recommendation.id,
+                    is_seen=False
+                )
+                db.add(user_recommendation)
+                stored_recommendations.append(recommendation)
         
         db.commit()
         return stored_recommendations
