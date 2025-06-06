@@ -95,7 +95,6 @@ async def stream_genie_recommendations(
     if ip_address:
         # Get location information from IP
         location = await get_location_from_ip(ip_address)
-        print(location)
         # Create user data with location information
         user_data = {}
         if location:
