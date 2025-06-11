@@ -28,8 +28,10 @@ class Message(BaseModel):
 class GenieAIRequest(BaseModel):
     model: str
     group: str
-    coordinates: Dict[str, Any]
     messages: List[Message]
+
+class PlacesGenieAIRequest(GenieAIRequest):
+    coordinates: Dict[str, Any]
     neighborhood: str
 
 class StreamPart(BaseModel):
@@ -114,7 +116,7 @@ async def stream_genie_recommendations(
         latitude = location.latitude
         longitude = location.longitude
     
-    request_data = GenieAIRequest(
+    request_data = PlacesGenieAIRequest(
         model="genie-gemini",
         group="web",
         neighborhood=neighborhood,
@@ -155,4 +157,55 @@ async def stream_genie_recommendations(
                         # Add other part types as needed (text, reasoning, etc.)
         except httpx.HTTPError as e:
             # Log the error here if you have a logging system
+            raise e
+
+async def stream_entertainment_recommendations(
+    prompt: str,
+) -> AsyncGenerator[Dict[str, Any], None]:
+    """
+    Stream movie and TV show recommendations from Genie AI service using Vercel AI SDK protocol.
+    
+    Args:
+        prompt: User's request for entertainment recommendations
+        
+    Yields:
+        Dict containing structured output (tool results) from the AI response with entertainment recommendations
+        
+    Raises:
+        httpx.HTTPError: If the request fails
+    """
+    GENIE_AI_URL = settings.GENIE_AI_URL
+    
+    request_data = GenieAIRequest(
+        model="genie-gemini",
+        group="web", 
+        messages=[
+            Message(role="user", parts=[MessagePart(type="text", text=prompt)])
+        ]
+    )
+    
+    headers = {
+        "Accept": "text/event-stream",
+        "Content-Type": "application/json",
+        "x-vercel-ai-data-stream": "v1"
+    }
+    
+    async with httpx.AsyncClient() as client:
+        try:
+            async with client.stream(
+                "POST",
+                GENIE_AI_URL,
+                json=request_data.model_dump(),
+                headers=headers,
+                timeout=30.0
+            ) as response:
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    if part := await parse_stream_part(line):
+                        if part.type == "a":  # Tool result part
+                            if "result" in part.content and part.content["result"] is not None and "result" in part.content["result"]:
+                                yield part.content["result"]
+                        elif part.type == "3":  # Error part
+                            raise Exception(f"AI Service Error: {part.content}")
+        except httpx.HTTPError as e:
             raise e

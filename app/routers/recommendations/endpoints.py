@@ -10,7 +10,7 @@ from fastapi_cache.decorator import cache
 from google import genai
 from openai import AsyncOpenAI
 from pydantic import BaseModel, Field
-from sqlalchemy import select, update, func
+from sqlalchemy import select, update, func, null
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from typing import Optional
@@ -27,7 +27,8 @@ from app.config import settings
 from app.init_db import get_db
 from app.models import User, UserRecommendation, Recommendation
 from app.services import get_user_by_id, find_common_archetypes, load_cover_images, select_cover_image, get_s3_image_url
-from app.tasks import generate_custom_recommendations
+from app.tasks import generate_custom_recommendations, generate_entertainment_recommendations
+from app.tasks.utils import EntertainmentType
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -166,6 +167,16 @@ async def generate_recommendations(
                 latitude=request.latitude,
                 longitude=request.longitude,
                 time_of_day=request.time_of_day,
+            )
+
+            generate_entertainment_recommendations.delay(
+                user_id=current_user["uid"],
+                entertainment_type=EntertainmentType.MOVIES,
+            )
+
+            generate_entertainment_recommendations.delay(
+                user_id=current_user["uid"],
+                entertainment_type=EntertainmentType.TV_SHOWS,
             )
 
             return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -629,10 +640,34 @@ async def get_user_recommendations(
                 detail="Both latitude and longitude must be provided together"
             )
 
-        # Build base query with join to recommendations table
-        query = (
+        # Base query for entertainment recommendations (movies and TV shows)
+        entertainment_query = (
             select(
-                UserRecommendation,
+                UserRecommendation.id.label('user_rec_id'),
+                Recommendation.id,
+                Recommendation.category,
+                Recommendation.prompt,
+                Recommendation.search_query,
+                Recommendation.place_details,
+                Recommendation.archetypes,
+                Recommendation.keywords,
+                Recommendation.image_url,
+                Recommendation.location_geom,
+                null().label('distance'),
+                UserRecommendation.created_at.label('created_at')
+            )
+            .join(Recommendation, UserRecommendation.recommendation_id == Recommendation.id)
+            .where(
+                UserRecommendation.user_id == current_user["uid"],
+                UserRecommendation.is_seen == False,
+                Recommendation.category.in_(["movies", "tv_shows"])
+            )
+        )
+
+        # Base query for location-based recommendations
+        location_query = (
+            select(
+                UserRecommendation.id.label('user_rec_id'),
                 Recommendation.id,
                 Recommendation.category,
                 Recommendation.prompt,
@@ -645,71 +680,69 @@ async def get_user_recommendations(
                 func.ST_Distance(
                     Recommendation.location_geom,
                     func.ST_GeomFromEWKT('SRID=4326;POINT(0 0)')
-                ).label('distance') if latitude and longitude else None
+                ).label('distance'),
+                UserRecommendation.created_at.label('created_at')
             )
             .join(Recommendation, UserRecommendation.recommendation_id == Recommendation.id)
             .where(
                 UserRecommendation.user_id == current_user["uid"],
-                UserRecommendation.is_seen == False
+                UserRecommendation.is_seen == False,
+                Recommendation.category.notin_(["movies", "tv_shows"])
             )
         )
-        
-        # Handle location-based search if coordinates are provided
+
+        # If coordinates are provided, add location-based filtering
         if latitude is not None and longitude is not None:
-            # Create WKT representation of the point
             point_wkt = f'SRID=4326;POINT({longitude} {latitude})'
-            
-            # Update the query with the WKT point
-            query = (
-                select(
-                    UserRecommendation,
-                    Recommendation.id,
-                    Recommendation.category,
-                    Recommendation.prompt,
-                    Recommendation.search_query,
-                    Recommendation.place_details,
-                    Recommendation.archetypes,
-                    Recommendation.keywords,
-                    Recommendation.image_url,
+            location_query = location_query.where(
+                func.ST_DWithin(
                     Recommendation.location_geom,
-                    func.ST_Distance(
-                        Recommendation.location_geom,
-                        func.ST_GeomFromEWKT(point_wkt)
-                    ).label('distance')
-                )
-                .join(Recommendation, UserRecommendation.recommendation_id == Recommendation.id)
-                .where(
-                    UserRecommendation.user_id == current_user["uid"],
-                    UserRecommendation.is_seen == False,
-                    func.ST_DWithin(
-                        Recommendation.location_geom,
-                        func.ST_GeomFromEWKT(point_wkt),
-                        radius_km * 1000  # Convert km to meters
-                    )
+                    func.ST_GeomFromEWKT(point_wkt),
+                    radius_km * 1000
                 )
             )
+            location_query = location_query.with_only_columns(
+                UserRecommendation.id.label('user_rec_id'),
+                Recommendation.id,
+                Recommendation.category,
+                Recommendation.prompt,
+                Recommendation.search_query,
+                Recommendation.place_details,
+                Recommendation.archetypes,
+                Recommendation.keywords,
+                Recommendation.image_url,
+                Recommendation.location_geom,
+                func.ST_Distance(
+                    Recommendation.location_geom,
+                    func.ST_GeomFromEWKT(point_wkt)
+                ).label('distance'),
+                UserRecommendation.created_at.label('created_at')
+            )
+
+        # Combine both queries using UNION ALL
+        combined_query = entertainment_query.union_all(location_query).subquery()
         
-        # Add time_of_day filter if provided
-        # TODO: ignore this for now until we have a way to filter by time of day
-        # if time_of_day:
-        #     if time_of_day not in ["morning", "afternoon", "evening", "night"]:
-        #         raise HTTPException(
-        #             status_code=status.HTTP_400_BAD_REQUEST,
-        #             detail="time_of_day must be one of: morning, afternoon, evening, night"
-        #         )
-        #     query = query.where(Recommendation.__table__.c.time_of_day == time_of_day)
-        
-        # Add pagination
-        query = query.offset(skip).limit(limit)
-        print(query)
-        result = await db.execute(query)
-        print(result)
+        # Add ordering and pagination
+        final_query = (
+            select(combined_query)
+            .order_by(
+                combined_query.c.category.in_(["movies", "tv_shows"]).desc()
+            )
+            .offset(skip)
+            .limit(limit)
+        )
+
+        result = await db.execute(final_query)
         results = result.all()
         
         # Process the results
         recommendations = []
+        entertainment_recommendations = []
+        location_recommendations = []
+        
         for row in results:
-            user_rec, rec_id, category, prompt, search_query, place_details, archetypes, keywords, image_url, location_geom, distance = row
+            # Unpack the row values (now including created_at)
+            user_rec_id, rec_id, category, prompt, search_query, place_details, archetypes, keywords, image_url, location_geom, distance, created_at = row
             
             recommendation_data = {
                 "id": rec_id,
@@ -720,13 +753,23 @@ async def get_user_recommendations(
                 "recommendedImage": image_url,
                 "usedArchetypes": archetypes,
                 "usedKeywords": keywords,
+                "created_at": created_at.isoformat() if created_at else None
             }
             
-            # Add distance if location search was used
-            if latitude is not None and longitude is not None and distance is not None:
-                recommendation_data["distance_km"] = round(distance / 1000, 2)  # Convert meters to kilometers
-                
-            recommendations.append(recommendation_data)
+            if category not in ["movies", "tv_shows"] and distance is not None:
+                recommendation_data["distance_km"] = round(distance / 1000, 2)
+            
+            if category in ["movies", "tv_shows"]:
+                entertainment_recommendations.append(recommendation_data)
+            else:
+                location_recommendations.append(recommendation_data)
+        
+        # Shuffle each list independently
+        random.shuffle(entertainment_recommendations)
+        random.shuffle(location_recommendations)
+        
+        # Combine the shuffled lists, maintaining entertainment-first order
+        recommendations = entertainment_recommendations + location_recommendations
         
         return recommendations
         

@@ -43,6 +43,7 @@ class Recommendation(Base):
     
     # Relationships
     user_recommendations = relationship("UserRecommendation", back_populates="recommendation")
+    resource_details = Column(JSONB, nullable=True)
 
 class UserRecommendation(Base):
     __tablename__ = 'user_recommendations'
