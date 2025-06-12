@@ -92,6 +92,7 @@ class ConnectionManager:
         if websocket:
             #await websocket.send_json(message)
             try:
+                logger.info(f"Sending personal message to {user_id}: {message}")    
                 await websocket.send_json(message)
             except Exception as e:
                 logger.warning(f"WebSocket send failed for user {user_id}: {e}")

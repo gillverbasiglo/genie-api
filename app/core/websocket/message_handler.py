@@ -37,7 +37,9 @@ class MessageHandler:
             WebSocketMessageType.TYPING_STATUS: self.handle_typing_status,
             WebSocketMessageType.USER_STATUS: self.handle_user_status,
             WebSocketMessageType.CHAT_GENIE_SUMMON: self.handle_chat_genie_summon,
-            WebSocketMessageType.CHAT_GENIE_SUMMON_IOS: self.handle_chat_genie_summon_ios
+            WebSocketMessageType.CHAT_GENIE_SUMMON_IOS: self.handle_chat_genie_summon_ios,
+            WebSocketMessageType.DRAG_END: self.handle_drag_end,
+            WebSocketMessageType.DRAG_UPDATE: self.handle_drag_update
         }
 
     async def handle_message(self, message_data: dict, user_id: str):
@@ -198,7 +200,27 @@ class MessageHandler:
             sender_user = await get_user_by_id(self.db, user_id)
             await send_push_notification_for_offline_user(receiver_id, self.db, sender_user.display_name, content)
 
+    async def handle_drag_update(self, message_data: dict, user_id: str):
+        logger.info(f"Drag update message received: {message_data}")
+        await self.manager.send_personal_message(
+            message_data.get("userId"),
+            {
+                "type": WebSocketMessageType.DRAG_UPDATE,
+                "message": message_data.get("message")
+            }
+        )
         
+    async def handle_drag_end(self, message_data: dict, user_id: str):
+        logger.info(f"Drag end message received: {message_data}")
+        await self.manager.send_personal_message(
+            message_data.get("userId"),
+            {
+                "type": WebSocketMessageType.DRAG_END,
+                "message": message_data.get("message")
+            }
+        )   
+
+
     async def handle_message_status_update(self, message_data: dict, user_id: str):
         """
         Update the status of a message (SENT, DELIVERED, READ).
