@@ -143,7 +143,11 @@ def store_entertainment_recommendations(
                 elif entertainment_type == EntertainmentType.MOVIES:
                     category = "movies"
                     picture_url = recommendation_dict.get("poster_path")
-                    name = recommendation_dict.get("original_title")
+                    name = (
+                        recommendation_dict.get("original_title") or
+                        recommendation_dict.get("title") or
+                        recommendation_dict.get("name")
+                    )
                 
                 # Create recommendation
                 recommendation = Recommendation(
