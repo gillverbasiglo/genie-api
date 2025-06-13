@@ -534,7 +534,7 @@ class FriendPortalRecommendationRequest(BaseModel):
     provider: str = "groq"
     max_recommendations: int = 3
     skip: int = Query(0, ge=0, description="Number of records to skip")
-    limit: int = Query(20, ge=1, le=20, description="Number of records to return")
+    limit: int = Query(15, ge=1, le=15, description="Number of records to return")
 
 class PaginatedRecommendationResponse(BaseModel):
     recommendations: List[dict]
