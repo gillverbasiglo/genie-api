@@ -149,7 +149,7 @@ def store_entertainment_recommendations(
                     category=category,
                     prompt=recommendation_dict.get("overview", ""),
                     search_query=name,
-                    place_details={},
+                    place_details=None,
                     archetypes=[recommendation_dict.get("usedArchetypes", [])],
                     keywords=recommendation_dict.get("usedKeywords", []),
                     image_concept=recommendation_dict.get("recommendedImageConcept"),
