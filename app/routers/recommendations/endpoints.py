@@ -653,6 +653,7 @@ async def get_user_recommendations(
                 Recommendation.keywords,
                 Recommendation.image_url,
                 Recommendation.location_geom,
+                Recommendation.resource_details,
                 null().label('distance'),
                 UserRecommendation.created_at.label('created_at')
             )
@@ -677,6 +678,7 @@ async def get_user_recommendations(
                 Recommendation.keywords,
                 Recommendation.image_url,
                 Recommendation.location_geom,
+                Recommendation.resource_details,
                 func.ST_Distance(
                     Recommendation.location_geom,
                     func.ST_GeomFromEWKT('SRID=4326;POINT(0 0)')
@@ -712,6 +714,7 @@ async def get_user_recommendations(
                 Recommendation.keywords,
                 Recommendation.image_url,
                 Recommendation.location_geom,
+                Recommendation.resource_details,
                 func.ST_Distance(
                     Recommendation.location_geom,
                     func.ST_GeomFromEWKT(point_wkt)
@@ -742,7 +745,7 @@ async def get_user_recommendations(
         
         for row in results:
             # Unpack the row values (now including created_at)
-            user_rec_id, rec_id, category, prompt, search_query, place_details, archetypes, keywords, image_url, location_geom, distance, created_at = row
+            user_rec_id, rec_id, category, prompt, search_query, place_details, archetypes, keywords, image_url, location_geom, resource_details, distance, created_at = row
             
             recommendation_data = {
                 "id": rec_id,
@@ -753,6 +756,7 @@ async def get_user_recommendations(
                 "recommendedImage": image_url,
                 "usedArchetypes": archetypes,
                 "usedKeywords": keywords,
+                "resourceDetails": resource_details,
                 "created_at": created_at.isoformat() if created_at else None
             }
             
