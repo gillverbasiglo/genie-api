@@ -134,19 +134,16 @@ def store_entertainment_recommendations(
             if recommendation_dict:
                 if entertainment_type == EntertainmentType.TV_SHOWS:
                     category = "tv_shows"
-                elif entertainment_type == EntertainmentType.MOVIES:
-                    category = "movies"
-
-                if entertainment_type == EntertainmentType.MOVIES:
-                    picture_url = recommendation_dict.get("poster_path")
-                    name = recommendation_dict.get("original_title")
-                elif entertainment_type == EntertainmentType.TV_SHOWS:
                     picture_url = recommendation_dict.get("backdrop_path")
                     name = (
                         recommendation_dict.get("original_name") or 
                         recommendation_dict.get("title") or
                         recommendation_dict.get("name")
                     )
+                elif entertainment_type == EntertainmentType.MOVIES:
+                    category = "movies"
+                    picture_url = recommendation_dict.get("poster_path")
+                    name = recommendation_dict.get("original_title")
                 
                 # Create recommendation
                 recommendation = Recommendation(
