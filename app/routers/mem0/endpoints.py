@@ -1,9 +1,8 @@
 # app/routers/mem0/endpoints.py
-
 import logging
 import json
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -24,10 +23,32 @@ router = APIRouter(prefix="/memories", tags=["memories"])
 
 mem0_manager = Mem0Manager()
 
-@router.post("/{user_id}/rebuild")
-async def rebuild_memories(user_id: str, db: AsyncSession = Depends(get_db)):
+@router.post("/{user_id}/generate_memories")
+async def generate_memories(user_id: str, db: AsyncSession = Depends(get_db)):
+    """
+    Generate and store new memories for a specific user.
+    
+    This endpoint triggers the memory generation process for a user, which involves:
+    1. Retrieving user data and context
+    2. Generating relevant memories using the MemoryService
+    3. Storing the generated memories in the database
+    
+    Args:
+        user_id (str): The unique identifier of the user for whom memories should be generated
+        db (AsyncSession): Database session dependency injected by FastAPI
+        
+    Returns:
+        dict: A response containing:
+            - status (str): "success" if memories were generated successfully
+            - memories_created (int): Number of memories that were created
+            
+    Raises:
+        HTTPException: 
+            - 404 if the user is not found
+            - 500 if there's an error during memory generation or storage
+    """
     try:
-        result = await MemoryService.create_user_memories(user_id, db)
+        result = await MemoryService.generate_user_memories(user_id, db)
         return {
             "status": "success",
             "memories_created": result
@@ -44,6 +65,21 @@ async def get_user_memories(
     page: int = 1,
     category: Optional[str] = None
 ):
+    """
+    Retrieve paginated memories for a specific user with optional category filtering.
+    
+    Args:
+        user_id (str): The ID of the user whose memories to retrieve
+        limit (int): Maximum number of memories to return per page
+        page (int): Page number for pagination
+        category (Optional[str]): Filter memories by category
+        
+    Returns:
+        dict: Status, user ID, and list of memories
+        
+    Raises:
+        HTTPException: 500 if retrieval fails
+    """
     try:
         memories = await MemoryService.get_memories(user_id, limit, category, page)
 
@@ -55,41 +91,29 @@ async def get_user_memories(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch memories: {e}")
 
-
-@router.post("/{user_id}/add")
-async def add_memory_for_user(user_id: str, payload: dict):
+@router.delete("/{user_id}/delete-all")
+async def delete_user_memories(user_id: str):
     """
-    Add a single memory for a user under a specific category.
-    Allowed categories: private_chat, user_archetypes, user_keywords
+    Delete all memories associated with a given user ID from Mem0.
+    
+    Args:
+        user_id (str): The ID of the user whose memories should be deleted
+        
+    Returns:
+        dict: Status, user ID, and deletion result
+        
+    Raises:
+        HTTPException: 500 if deletion fails
     """
-    logger.info(f"🧠 Adding memory for user {user_id} | payload: {payload}")
-    result = None
+    logger.info(f"🗑️ Attempting to delete all memories for user {user_id}")
     try:
-
-        result = await mem0_manager.client.add(
-            messages=[{
-                "role": "user",
-                "content": payload["content"]
-            }],
-            user_id=user_id,
-            metadata=build_metadata(payload["category"]),
-            infer=False,
-            output_format="v1.1"
-        )
-
-        logger.info(f"✅ Memory added successfully for user {user_id}")
-
+        result = await mem0_manager.client.delete_all(user_id=user_id)
+        logger.info(f"✅ Deleted memories for user {user_id}")
+        return {
+            "status": "success",
+            "user_id": user_id,
+            "result": result
+        }
     except Exception as e:
-        content = None
-        if hasattr(e, 'response') and e.response is not None:
-            try:
-                content = await e.response.aread()
-                logger.error(f"❌ Mem0 response content for '{payload['category']}': {content.decode('utf-8')}")
-            except Exception as read_error:
-                logger.error(f"❌ Failed to read error response content: {read_error}")
-        logger.exception(f"❌ Exception adding memory for user {user_id}: {e}")
-
-    return {
-        "status": "success",
-        "mem0_result": result
-    }
+        logger.exception(f"❌ Failed to delete memories for user {user_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete user memories: {e}")
