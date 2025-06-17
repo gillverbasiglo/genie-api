@@ -600,6 +600,7 @@ async def get_friend_portal_recommendations(
             
             recommendation = {
                 "title": user_recommendation.recommendation.search_query,
+                "category": user_recommendation.recommendation.category,
                 "description": user_recommendation.recommendation.prompt,
                 "practical_tips": practical_tips,
                 "searchQuery": user_recommendation.recommendation.search_query,
@@ -607,6 +608,7 @@ async def get_friend_portal_recommendations(
                 "archetypes": user_recommendation.recommendation.archetypes or [],
                 "image": user_recommendation.recommendation.image_url,
                 "placeDetails": user_recommendation.recommendation.place_details,
+                "resourceDetails": user_recommendation.recommendation.resource_details,
                 "created_at": user_recommendation.created_at.isoformat() if user_recommendation.created_at else None,
             }
             recommendations.append(recommendation)
