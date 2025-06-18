@@ -631,6 +631,7 @@ async def get_user_recommendations(
     longitude: Optional[float] = Query(None, ge=-180, le=180, description="Longitude in decimal degrees"),
     radius_km: Optional[float] = Query(50.0, ge=0.1, le=50.0, description="Search radius in kilometers (max 50km)"),
     time_of_day: Optional[str] = Query(None, description="Filter recommendations by time of day (morning, afternoon, evening, night)"),
+    neighborhood: Optional[str] = Query(None, description="Neighborhood name for location-based filtering"),
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
@@ -770,12 +771,36 @@ async def get_user_recommendations(
             else:
                 location_recommendations.append(recommendation_data)
         
-        # Shuffle each list independently
+        # Check if no location recommendations were found and trigger generation if coordinates are provided
+        if not location_recommendations and latitude is not None and longitude is not None:
+            logger.info(f"No location recommendations found for user {current_user['uid']}, triggering custom recommendations generation")
+            # Trigger async task to generate new location-based recommendations
+            # Note: This is a fire-and-forget operation - the user will get new recommendations on next request
+            generate_custom_recommendations.delay(
+                user_id=current_user["uid"],
+                neighborhood=neighborhood,  # Use provided neighborhood or None
+                latitude=latitude,
+                longitude=longitude,
+                time_of_day=time_of_day or "afternoon",  # Default to afternoon if not specified
+            )
+        
+        # Shuffle each list independently for variety
         random.shuffle(entertainment_recommendations)
         random.shuffle(location_recommendations)
         
-        # Combine the shuffled lists, maintaining entertainment-first order
-        recommendations = entertainment_recommendations + location_recommendations
+        # Interleave location and entertainment recommendations for better user experience
+        # Pattern: 1 location, 1 entertainment, 1 location, 1 entertainment, etc.
+        recommendations = []
+        max_length = max(len(location_recommendations), len(entertainment_recommendations))
+        
+        for i in range(max_length):
+            # Add location recommendation if available
+            if i < len(location_recommendations):
+                recommendations.append(location_recommendations[i])
+            
+            # Add entertainment recommendation if available
+            if i < len(entertainment_recommendations):
+                recommendations.append(entertainment_recommendations[i])
         
         return recommendations
         
