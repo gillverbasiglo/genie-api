@@ -113,3 +113,40 @@ async def unregister_device_token(
             detail="Failed to unregister device token"
         )
     
+async def get_device_token(
+    db: AsyncSession,
+    user_id: str
+):
+    logger.info(f"Getting device token for user: {user_id}")
+    """
+    Get a device token for push notifications.
+    
+    Args:
+        db (AsyncSession): Database session
+        user_id (str): The user id to get the device token for
+        
+    Returns:    
+        DeviceToken: The registered or reactivated device token
+        
+    Raises:
+        HTTPException: If there's an error during registration
+    """
+    try:
+        # Check if token already exists for this user
+        stmt = select(DeviceToken).where(
+            DeviceToken.user_id == user_id,
+            DeviceToken.is_active == True
+        )
+        token = await db.execute(stmt)
+        token = token.scalars().all()
+        
+        logger.info(f"Token: {token}")
+        return token
+        
+    except Exception as e:
+        logger.error(f"Error getting device token: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to get device token"
+        )
+    
