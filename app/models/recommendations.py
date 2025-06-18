@@ -64,7 +64,7 @@ class UserRecommendation(Base):
     feedback = Column(Text, nullable=True)  # Text feedback
     
     # Timestamps for analytics and model training
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))
     seen_at = Column(DateTime, nullable=True)
     saved_at = Column(DateTime, nullable=True)
     visited_at = Column(DateTime, nullable=True)
