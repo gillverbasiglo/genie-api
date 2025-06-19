@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timezone
 from sqlite3 import IntegrityError
 from fastapi import HTTPException, logger, status, Request
@@ -5,13 +6,14 @@ from app.models import User
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import String, not_, or_, select
 from typing import Dict, List, Optional
-
 from app.models.friends.friend_requests import FriendRequest
 from app.models.friends.friends import Friend
 from app.models.invitation import Invitation
 from app.models.notifications import Notification
 from app.schemas.invitation import ContactCheckResponse
 from app.schemas.users import UpdateArchetypesAndKeywordsRequest, UserCreate
+
+logger = logging.getLogger(__name__)
 
 async def get_user_by_id(db: AsyncSession, user_id: str) -> Optional[User]:
     """
