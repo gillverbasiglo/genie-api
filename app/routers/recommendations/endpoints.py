@@ -725,18 +725,26 @@ async def get_user_recommendations(
                 UserRecommendation.created_at.label('created_at')
             )
 
-        # Combine both queries using UNION ALL
-        combined_query = entertainment_query.union_all(location_query).subquery()
-        
-        # Add ordering and pagination
-        final_query = (
-            select(combined_query)
-            .order_by(
-                combined_query.c.category.in_(["movies", "tv_shows"]).desc()
+        # If no coordinates provided, only return entertainment recommendations
+        if latitude is None or longitude is None:
+            final_query = (
+                select(entertainment_query)
+                .order_by(entertainment_query.c.category.in_(["movies", "tv_shows"]).desc())
+                .offset(skip)
+                .limit(limit)
             )
-            .offset(skip)
-            .limit(limit)
-        )
+        else:
+            # Combine both queries using UNION ALL
+            combined_query = entertainment_query.union_all(location_query).subquery()
+            # Add ordering and pagination
+            final_query = (
+                select(combined_query)
+                .order_by(
+                    combined_query.c.category.in_(["movies", "tv_shows"]).desc()
+                )
+                .offset(skip)
+                .limit(limit)
+            )
 
         result = await db.execute(final_query)
         results = result.all()
