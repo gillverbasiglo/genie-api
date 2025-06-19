@@ -228,11 +228,11 @@ async def register_user(
     logger.info(f"Starting registration for user_id={user_id}, email={user_data.email}, phone_number={user_data.phone_number}")
     try:
 
-        # Check if user already exists by phone number or email
+        # Check if user already exists by phone number or id
         existing_user_query = await db.execute(
             select(User).where(
                 (User.phone_number == user_data.phone_number) |
-                (User.email == user_data.email)
+                (User.id == user_id)
             )
         )
         existing_user = existing_user_query.scalar_one_or_none()
