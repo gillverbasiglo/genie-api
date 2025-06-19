@@ -131,8 +131,8 @@ async def share_content(
         notification = Notification(
             user_id=to_user.id,
             type=NotificationType.SHARE,
-            title=share_data.title,
-            message=share_data.message,
+            title=f"{from_user.display_name} shared a portal with you.",
+            message="Launch the app to see the magic",
             data=json.dumps({
                 "content_id": share_data.content_id,
                 "content_type": share_data.content_type,
