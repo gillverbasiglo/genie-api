@@ -11,6 +11,7 @@ from google import genai
 from openai import AsyncOpenAI
 from pydantic import BaseModel, Field
 from sqlalchemy import select, update, func, null
+from sqlalchemy.sql import Select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from typing import Optional
@@ -623,6 +624,128 @@ async def get_friend_portal_recommendations(
         logger.error(f"Error finding common archetypes: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+def _build_base_query(user_id: str, category_filter: List[str]) -> Select:
+    """Build base query for recommendations with common fields."""
+    return (
+        select(
+            UserRecommendation.id.label('user_rec_id'),
+            Recommendation.id,
+            Recommendation.category,
+            Recommendation.prompt,
+            Recommendation.search_query,
+            Recommendation.place_details,
+            Recommendation.archetypes,
+            Recommendation.keywords,
+            Recommendation.image_url,
+            Recommendation.location_geom,
+            Recommendation.resource_details,
+            null().label('distance'),
+            UserRecommendation.created_at.label('created_at')
+        )
+        .join(Recommendation, UserRecommendation.recommendation_id == Recommendation.id)
+        .where(
+            UserRecommendation.user_id == user_id,
+            UserRecommendation.is_seen == False,
+            Recommendation.category.in_(category_filter)
+        )
+    )
+
+def _build_entertainment_query(user_id: str) -> Select:
+    """Build query for entertainment recommendations."""
+    return _build_base_query(user_id, ["movies", "tv_shows"])
+
+def _build_location_query(user_id: str, latitude: Optional[float], longitude: Optional[float], radius_km: float) -> Select:
+    """Build query for location-based recommendations with optional spatial filtering."""
+    query = (
+        select(
+            UserRecommendation.id.label('user_rec_id'),
+            Recommendation.id,
+            Recommendation.category,
+            Recommendation.prompt,
+            Recommendation.search_query,
+            Recommendation.place_details,
+            Recommendation.archetypes,
+            Recommendation.keywords,
+            Recommendation.image_url,
+            Recommendation.location_geom,
+            Recommendation.resource_details,
+            null().label('distance'),
+            UserRecommendation.created_at.label('created_at')
+        )
+        .join(Recommendation, UserRecommendation.recommendation_id == Recommendation.id)
+        .where(
+            UserRecommendation.user_id == user_id,
+            UserRecommendation.is_seen == False,
+            Recommendation.category.notin_(["movies", "tv_shows"])
+        )
+    )
+    
+    if latitude is not None and longitude is not None:
+        point_wkt = f'SRID=4326;POINT({longitude} {latitude})'
+        query = query.where(
+            func.ST_DWithin(
+                Recommendation.location_geom,
+                func.ST_GeomFromEWKT(point_wkt),
+                radius_km * 1000
+            )
+        )
+        # Update distance calculation for filtered results
+        query = query.with_only_columns(
+            UserRecommendation.id.label('user_rec_id'),
+            Recommendation.id,
+            Recommendation.category,
+            Recommendation.prompt,
+            Recommendation.search_query,
+            Recommendation.place_details,
+            Recommendation.archetypes,
+            Recommendation.keywords,
+            Recommendation.image_url,
+            Recommendation.location_geom,
+            Recommendation.resource_details,
+            func.ST_Distance(
+                Recommendation.location_geom,
+                func.ST_GeomFromEWKT(point_wkt)
+            ).label('distance'),
+            UserRecommendation.created_at.label('created_at')
+        )
+    
+    return query
+
+def _process_recommendation_row(row) -> dict:
+    """Process a single recommendation row into a dictionary."""
+    user_rec_id, rec_id, category, prompt, search_query, place_details, archetypes, keywords, image_url, location_geom, resource_details, distance, created_at = row
+    
+    recommendation_data = {
+        "id": rec_id,
+        "category": category,
+        "prompt": prompt,
+        "searchQuery": search_query,
+        "placeDetails": place_details,
+        "recommendedImage": image_url,
+        "usedArchetypes": archetypes,
+        "usedKeywords": keywords,
+        "resourceDetails": resource_details,
+        "created_at": created_at.isoformat() if created_at else None
+    }
+    
+    if category not in ["movies", "tv_shows"] and distance is not None:
+        recommendation_data["distance_km"] = round(distance / 1000, 2)
+    
+    return recommendation_data
+
+def _interleave_recommendations(entertainment_recommendations: List[dict], location_recommendations: List[dict]) -> List[dict]:
+    """Interleave entertainment and location recommendations."""
+    recommendations = []
+    max_length = max(len(location_recommendations), len(entertainment_recommendations))
+    
+    for i in range(max_length):
+        if i < len(location_recommendations):
+            recommendations.append(location_recommendations[i])
+        if i < len(entertainment_recommendations):
+            recommendations.append(entertainment_recommendations[i])
+    
+    return recommendations
+
 @router.get("/user-recommendations", response_model=List[dict])
 async def get_user_recommendations(
     skip: int = Query(0, ge=0, description="Number of records to skip"),
@@ -636,181 +759,69 @@ async def get_user_recommendations(
     current_user: dict = Depends(get_current_user)
 ):
     try:
-        # Validate that both latitude and longitude are provided if either is present
+        # Validate coordinates
         if (latitude is None) != (longitude is None):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Both latitude and longitude must be provided together"
             )
 
-        # Base query for entertainment recommendations (movies and TV shows)
-        entertainment_query = (
-            select(
-                UserRecommendation.id.label('user_rec_id'),
-                Recommendation.id,
-                Recommendation.category,
-                Recommendation.prompt,
-                Recommendation.search_query,
-                Recommendation.place_details,
-                Recommendation.archetypes,
-                Recommendation.keywords,
-                Recommendation.image_url,
-                Recommendation.location_geom,
-                Recommendation.resource_details,
-                null().label('distance'),
-                UserRecommendation.created_at.label('created_at')
-            )
-            .join(Recommendation, UserRecommendation.recommendation_id == Recommendation.id)
-            .where(
-                UserRecommendation.user_id == current_user["uid"],
-                UserRecommendation.is_seen == False,
-                Recommendation.category.in_(["movies", "tv_shows"])
-            )
-        )
+        user_id = current_user["uid"]
+        has_coordinates = latitude is not None and longitude is not None
 
-        # Base query for location-based recommendations
-        location_query = (
-            select(
-                UserRecommendation.id.label('user_rec_id'),
-                Recommendation.id,
-                Recommendation.category,
-                Recommendation.prompt,
-                Recommendation.search_query,
-                Recommendation.place_details,
-                Recommendation.archetypes,
-                Recommendation.keywords,
-                Recommendation.image_url,
-                Recommendation.location_geom,
-                Recommendation.resource_details,
-                func.ST_Distance(
-                    Recommendation.location_geom,
-                    func.ST_GeomFromEWKT('SRID=4326;POINT(0 0)')
-                ).label('distance'),
-                UserRecommendation.created_at.label('created_at')
-            )
-            .join(Recommendation, UserRecommendation.recommendation_id == Recommendation.id)
-            .where(
-                UserRecommendation.user_id == current_user["uid"],
-                UserRecommendation.is_seen == False,
-                Recommendation.category.notin_(["movies", "tv_shows"])
-            )
-        )
+        # Build queries
+        entertainment_query = _build_entertainment_query(user_id)
+        location_query = _build_location_query(user_id, latitude, longitude, radius_km)
 
-        # If coordinates are provided, add location-based filtering
-        if latitude is not None and longitude is not None:
-            point_wkt = f'SRID=4326;POINT({longitude} {latitude})'
-            location_query = location_query.where(
-                func.ST_DWithin(
-                    Recommendation.location_geom,
-                    func.ST_GeomFromEWKT(point_wkt),
-                    radius_km * 1000
-                )
-            )
-            location_query = location_query.with_only_columns(
-                UserRecommendation.id.label('user_rec_id'),
-                Recommendation.id,
-                Recommendation.category,
-                Recommendation.prompt,
-                Recommendation.search_query,
-                Recommendation.place_details,
-                Recommendation.archetypes,
-                Recommendation.keywords,
-                Recommendation.image_url,
-                Recommendation.location_geom,
-                Recommendation.resource_details,
-                func.ST_Distance(
-                    Recommendation.location_geom,
-                    func.ST_GeomFromEWKT(point_wkt)
-                ).label('distance'),
-                UserRecommendation.created_at.label('created_at')
-            )
-
-        # If no coordinates provided, only return entertainment recommendations
-        if latitude is None or longitude is None:
+        # Execute appropriate query based on coordinates
+        if has_coordinates:
+            combined_query = entertainment_query.union_all(location_query).subquery()
             final_query = (
-                select(entertainment_query)
-                .order_by(entertainment_query.c.category.in_(["movies", "tv_shows"]).desc())
+                select(combined_query)
+                .order_by(combined_query.c.category.in_(["movies", "tv_shows"]).desc())
                 .offset(skip)
                 .limit(limit)
             )
         else:
-            # Combine both queries using UNION ALL
-            combined_query = entertainment_query.union_all(location_query).subquery()
-            # Add ordering and pagination
+            entertainment_subquery = entertainment_query.subquery()
             final_query = (
-                select(combined_query)
-                .order_by(
-                    combined_query.c.category.in_(["movies", "tv_shows"]).desc()
-                )
+                select(entertainment_subquery)
+                .order_by(entertainment_subquery.c.category.in_(["movies", "tv_shows"]).desc())
                 .offset(skip)
                 .limit(limit)
             )
 
+        # Execute query and process results
         result = await db.execute(final_query)
         results = result.all()
         
-        # Process the results
-        recommendations = []
+        # Separate and process recommendations
         entertainment_recommendations = []
         location_recommendations = []
         
         for row in results:
-            # Unpack the row values (now including created_at)
-            user_rec_id, rec_id, category, prompt, search_query, place_details, archetypes, keywords, image_url, location_geom, resource_details, distance, created_at = row
-            
-            recommendation_data = {
-                "id": rec_id,
-                "category": category,
-                "prompt": prompt,
-                "searchQuery": search_query,
-                "placeDetails": place_details,
-                "recommendedImage": image_url,
-                "usedArchetypes": archetypes,
-                "usedKeywords": keywords,
-                "resourceDetails": resource_details,
-                "created_at": created_at.isoformat() if created_at else None
-            }
-            
-            if category not in ["movies", "tv_shows"] and distance is not None:
-                recommendation_data["distance_km"] = round(distance / 1000, 2)
-            
-            if category in ["movies", "tv_shows"]:
+            recommendation_data = _process_recommendation_row(row)
+            if recommendation_data["category"] in ["movies", "tv_shows"]:
                 entertainment_recommendations.append(recommendation_data)
             else:
                 location_recommendations.append(recommendation_data)
         
-        # Check if no location recommendations were found and trigger generation if coordinates are provided
-        if not location_recommendations and latitude is not None and longitude is not None:
-            logger.info(f"No location recommendations found for user {current_user['uid']}, triggering custom recommendations generation")
-            # Trigger async task to generate new location-based recommendations
-            # Note: This is a fire-and-forget operation - the user will get new recommendations on next request
+        # Trigger generation if no location recommendations found
+        if not location_recommendations and has_coordinates:
+            logger.info(f"No location recommendations found for user {user_id}, triggering custom recommendations generation")
             generate_custom_recommendations.delay(
-                user_id=current_user["uid"],
-                neighborhood=neighborhood,  # Use provided neighborhood or None
+                user_id=user_id,
+                neighborhood=neighborhood,
                 latitude=latitude,
                 longitude=longitude,
-                time_of_day=time_of_day or "afternoon",  # Default to afternoon if not specified
+                time_of_day=time_of_day or "afternoon",
             )
         
-        # Shuffle each list independently for variety
+        # Shuffle and interleave recommendations
         random.shuffle(entertainment_recommendations)
         random.shuffle(location_recommendations)
         
-        # Interleave location and entertainment recommendations for better user experience
-        # Pattern: 1 location, 1 entertainment, 1 location, 1 entertainment, etc.
-        recommendations = []
-        max_length = max(len(location_recommendations), len(entertainment_recommendations))
-        
-        for i in range(max_length):
-            # Add location recommendation if available
-            if i < len(location_recommendations):
-                recommendations.append(location_recommendations[i])
-            
-            # Add entertainment recommendation if available
-            if i < len(entertainment_recommendations):
-                recommendations.append(entertainment_recommendations[i])
-        
-        return recommendations
+        return _interleave_recommendations(entertainment_recommendations, location_recommendations)
         
     except Exception as e:
         logger.error(f"Error fetching user recommendations: {str(e)}")
