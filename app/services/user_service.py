@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timezone
 from sqlite3 import IntegrityError
 from fastapi import HTTPException, logger, status, Request
@@ -5,11 +6,14 @@ from app.models import User
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import String, not_, or_, select
 from typing import Dict, List, Optional
-
+from app.models.friends.friend_requests import FriendRequest
 from app.models.friends.friends import Friend
 from app.models.invitation import Invitation
+from app.models.notifications import Notification
 from app.schemas.invitation import ContactCheckResponse
 from app.schemas.users import UpdateArchetypesAndKeywordsRequest, UserCreate
+
+logger = logging.getLogger(__name__)
 
 async def get_user_by_id(db: AsyncSession, user_id: str) -> Optional[User]:
     """
@@ -220,6 +224,8 @@ async def register_user(
     Raises:
         HTTPException: If registration fails due to duplicate data or other errors
     """
+
+    logger.info(f"Starting registration for user_id={user_id}, email={user_data.email}, phone_number={user_data.phone_number}")
     try:
 
         # Check if user already exists by phone number or email
@@ -232,6 +238,7 @@ async def register_user(
         existing_user = existing_user_query.scalar_one_or_none()
 
         if existing_user:
+            logger.warning(f"User already exists with email={user_data.email} or phone={user_data.phone_number}")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="User with this phone number or email already exists."
@@ -245,9 +252,11 @@ async def register_user(
             display_name=user_data.display_name,
             created_at=datetime.now(timezone.utc)
         )
+        logger.info(f"Creating user with ID {user_id}")
 
         # Handle invitation if invite code is provided
         if user_data.invite_code:
+            logger.info(f"Checking invitation for invite_code={user_data.invite_code}")
             query_result = await db.execute(select(Invitation).where(
                 Invitation.invite_code == user_data.invite_code,
                 Invitation.status == "pending"
@@ -255,6 +264,7 @@ async def register_user(
             invitation = query_result.scalar_one_or_none()
 
             if invitation:
+                logger.info(f"Invite code {user_data.invite_code} accepted by user_id={user_id}")
                 # Update invitation status and link to new user
                 invitation.status = "accepted"
                 invitation.accepted_at = datetime.now(timezone.UTC)
@@ -264,7 +274,7 @@ async def register_user(
         db.add(new_user)
         await db.commit()
         await db.refresh(new_user)
-
+        logger.info(f"User registered successfully: user_id={new_user.id}")
         return {
             "message": "User registered successfully",
             "user_id": new_user.id,
@@ -369,6 +379,23 @@ async def delete_user(
                     Friend.user_id == user.id,
                     Friend.friend_id == user.id
                 )
+            ).execution_options(synchronize_session="fetch")
+        )
+
+        # Delete friend request relationships
+        await db.execute(
+            select(FriendRequest).where(
+                or_(
+                    FriendRequest.from_user_id == user.id,
+                    FriendRequest.to_user_id == user.id
+                )
+            ).execution_options(synchronize_session="fetch")
+        )
+
+        # Delete notifications
+        await db.execute(
+            select(Notification).where(
+                Notification.user_id == user.id
             ).execution_options(synchronize_session="fetch")
         )
 
