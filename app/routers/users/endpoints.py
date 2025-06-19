@@ -118,6 +118,8 @@ async def register_user_api(
         time_of_day = get_time_of_day()  # Get time of day based on server time
         generate_user_recommendations.delay(current_user["uid"], ip_address, time_of_day)
         return response
+    except HTTPException as http_exc:
+        raise http_exc  # Re-raise known application errors directly
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

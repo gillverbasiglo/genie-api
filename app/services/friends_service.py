@@ -132,7 +132,7 @@ async def send_friend_request(
         user_id=request.to_user_id,
         type=NotificationType.FRIEND_REQUEST,
         title="New friend request.",
-        message=f"{current_user['uid']} sent you a friend request."
+        message=f"{sender_user_dict['display_name']} sent you a friend request."
     )
     db.add(notification)
     await db.commit()
