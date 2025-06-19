@@ -221,6 +221,22 @@ async def register_user(
         HTTPException: If registration fails due to duplicate data or other errors
     """
     try:
+
+        # Check if user already exists by phone number or email
+        existing_user_query = await db.execute(
+            select(User).where(
+                (User.phone_number == user_data.phone_number) |
+                (User.email == user_data.email)
+            )
+        )
+        existing_user = existing_user_query.scalar_one_or_none()
+
+        if existing_user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="User with this phone number or email already exists."
+            )
+        
         # Create new user instance
         new_user = User(
             id=user_id,
