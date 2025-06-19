@@ -112,6 +112,7 @@ async def register_user_api(
     Raises:
         HTTPException: If registration fails
     """
+    logger.info(f"Starting registration for user_id={current_user['uid']}, email={user_data.email}, phone_number={user_data.phone_number}")
     try:
         response = await register_user(user_data, current_user["uid"], db)
         ip_address = await get_user_ip_address(request)
