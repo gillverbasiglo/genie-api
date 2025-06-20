@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from app.core.websocket.message_handler import MessageHandler
 from app.core.websocket.websocket_manager import manager  
+from app.database import AsyncSessionLocal
 from app.init_db import get_db
 from app.models.user import User
 
@@ -17,8 +18,7 @@ router = APIRouter(prefix="/ws", tags=["web-socket"])
 @router.websocket("/{user_id}")
 async def websocket_endpoint(
     websocket: WebSocket,
-    user_id: str,
-    db: AsyncSession = Depends(get_db)
+    user_id: str
 ):
     """
     Main WebSocket endpoint for user connections.
@@ -38,8 +38,9 @@ async def websocket_endpoint(
         logger.info(f"Attempting WebSocket connection for user: {user_id}")
         
         # Verify user exists in database
-        results = await db.execute(select(User).where(User.id == user_id))
-        user = results.scalar_one_or_none()
+        async with AsyncSessionLocal() as db:
+            results = await db.execute(select(User).where(User.id == user_id))
+            user = results.scalar_one_or_none()
 
         if not user:
             logger.warning(f"User {user_id} not found")
@@ -51,7 +52,7 @@ async def websocket_endpoint(
         logger.info(f"WebSocket connected for user {user_id}")
 
         # Initialize message handler for processing incoming messages
-        message_handler = MessageHandler(db, manager)
+        message_handler = MessageHandler(manager)
 
         try:
             # Main message processing loop

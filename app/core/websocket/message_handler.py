@@ -4,6 +4,7 @@ from typing import Callable, Dict, List, Union
 
 from sqlalchemy import select
 from app.core.websocket.websocket_manager import ConnectionManager
+from app.database import AsyncSessionLocal
 from app.models.chat.private_chat_message import Message
 from app.schemas.websocket import WebSocketMessageType
 from app.schemas.private_chat_message import MessageStatus, MessageType
@@ -20,7 +21,7 @@ class MessageHandler:
     Handles different types of WebSocket messages and manages real-time communication.
     """
 
-    def __init__(self, db: AsyncSession, manager: ConnectionManager):
+    def __init__(self, manager: ConnectionManager):
         """
         Initialize the MessageHandler with database session and WebSocket manager.
 
@@ -28,7 +29,6 @@ class MessageHandler:
             db (AsyncSession): SQLAlchemy async database session
             manager: WebSocket connection manager instance
         """
-        self.db = db
         self.manager = manager
         # Map message types to their handler functions
         self.handlers: Dict[str, Callable] = {
@@ -101,7 +101,7 @@ class MessageHandler:
                 "type": "ERROR",
                 "message": "Failed to get response from genie."
             })"""
-        try:
+        """try:
             result = await call_recommendation_api(self.db, user_1_id, user_2_id, query)
             logger.info(f"Result: {result}")
             structured_result = self.extract_result_only(result)
@@ -123,8 +123,7 @@ class MessageHandler:
             await self.manager.send_personal_message(user_2_id, {
                 "type": "ERROR",
                 "message": "Failed to get response from genie."
-            })
-
+            })"""
 
     async def handle_chat_genie_summon_ios(self, message_data: dict, user_id: str):
         receiver_id = message_data.get("receiver_id")
@@ -136,9 +135,7 @@ class MessageHandler:
                 "type": WebSocketMessageType.CHAT_GENIE_SUMMON_IOS,
                 "message": message
             })
-
-        
-
+     
     async def handle_private_chat_message(self, message_data: dict, user_id: str):
         """
         Process and store private chat messages.
@@ -157,48 +154,49 @@ class MessageHandler:
         timestamp = datetime.now()
 
         # Create and store new message in database
-        new_message = Message(
-            id=uuid.uuid4(),
-            sender_id=user_id,
-            receiver_id=receiver_id,
-            message_type=MessageType.TEXT,
-            content=content,
-            media_url=None,
-            metadata=None,
-            status=MessageStatus.SENT,
-            created_at=timestamp,
-            updated_at=timestamp
-        )
+        async with AsyncSessionLocal() as db:
+            new_message = Message(
+                id=uuid.uuid4(),
+                sender_id=user_id,
+                receiver_id=receiver_id,
+                message_type=MessageType.TEXT,
+                content=content,
+                media_url=None,
+                metadata=None,
+                status=MessageStatus.SENT,
+                created_at=timestamp,
+                updated_at=timestamp
+            )
                     
-        self.db.add(new_message)
-        await self.db.commit()
-        await self.db.refresh(new_message)
+            db.add(new_message)
+            await db.commit()
+            await db.refresh(new_message)
 
-        # Convert timestamp to ISO format for JSON serialization
-        timestamp_str = timestamp.isoformat()
+            # Convert timestamp to ISO format for JSON serialization
+            timestamp_str = timestamp.isoformat()
 
-        message_dict = {
-            "type":  WebSocketMessageType.PRIVATE_CHAT_MESSAGE, 
-            "id": new_message.id, 
-            "sender_id": user_id, 
-            "receiver_id": receiver_id,
-            "content": content, 
-            "status": MessageStatus.SENT, 
-            "timestamp": timestamp_str
-        }
+            message_dict = {
+                "type":  WebSocketMessageType.PRIVATE_CHAT_MESSAGE, 
+                "id": new_message.id, 
+                "sender_id": user_id, 
+                "receiver_id": receiver_id,
+                "content": content, 
+                "status": MessageStatus.SENT, 
+                "timestamp": timestamp_str
+            }
 
-        # Handle real-time notification delivery
-        is_user_online = self.manager.is_user_online(receiver_id)
-        logger.info(f"Recipient user online: {is_user_online}")
+            # Handle real-time notification delivery
+            is_user_online = self.manager.is_user_online(receiver_id)
+            logger.info(f"Recipient user online: {is_user_online}")
 
-        if is_user_online:
-            await self.manager.send_personal_message(
-                        receiver_id,
-                        message_dict
-                    )
-        else:
-            sender_user = await get_user_by_id(self.db, user_id)
-            await send_push_notification_for_offline_user(receiver_id, self.db, sender_user.display_name, content)
+            if is_user_online:
+                await self.manager.send_personal_message(
+                            receiver_id,
+                            message_dict
+                        )
+            else:
+                sender_user = await get_user_by_id(db, user_id)
+                await send_push_notification_for_offline_user(receiver_id, db, sender_user.display_name, content)
 
     async def handle_drag_update(self, message_data: dict, user_id: str):
         logger.info(f"Drag update message received: {message_data}")
@@ -220,7 +218,6 @@ class MessageHandler:
             }
         )   
 
-
     async def handle_message_status_update(self, message_data: dict, user_id: str):
         """
         Update the status of a message (SENT, DELIVERED, READ).
@@ -238,29 +235,30 @@ class MessageHandler:
             return
 
         # Fetch and update message status
-        stmt = select(Message).where(Message.id == message_id)
-        result = await self.db.execute(stmt)
-        message = result.scalar_one_or_none()
+        async with AsyncSessionLocal() as db:
+            stmt = select(Message).where(Message.id == message_id)
+            result = await db.execute(stmt)
+            message = result.scalar_one_or_none()
 
-        if message:
-            message.status = new_status
-            message.updated_at = datetime.now()
-            await self.db.commit()
-            await self.db.refresh(message)
+            if message:
+                message.status = new_status
+                message.updated_at = datetime.now()
+                await db.commit()
+                await db.refresh(message)
 
-            logger.info(f"Updated message status to {new_status} for message {message_id}")
+                logger.info(f"Updated message status to {new_status} for message {message_id}")
 
-            # Notify sender of status change
-            await self.manager.send_personal_message(
-                message.sender_id,
-                {
-                    "type": WebSocketMessageType.MESSAGE_STATUS_UPDATE,
-                    "message_id": message_id,
-                    "status": new_status
-                }
-            )
-        else:
-            logger.warning(f"Message not found for ID {message_id}")
+                # Notify sender of status change
+                await self.manager.send_personal_message(
+                    message.sender_id,
+                    {
+                        "type": WebSocketMessageType.MESSAGE_STATUS_UPDATE,
+                        "message_id": message_id,
+                        "status": new_status
+                    }
+                )
+            else:
+                logger.warning(f"Message not found for ID {message_id}")
             
     async def handle_typing_status(self, messsage_data: dict, user_id: str):
         """
