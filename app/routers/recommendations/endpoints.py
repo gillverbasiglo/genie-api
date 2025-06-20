@@ -22,6 +22,7 @@ from geopy.geocoders import Nominatim
 from geopy.exc import GeocoderTimedOut, GeocoderServiceError
 from shapely.geometry import Point
 from geoalchemy2 import Geometry
+from sqlalchemy.dialects import postgresql
 
 from app.common import get_current_user
 from app.config import settings
@@ -781,7 +782,11 @@ async def get_user_recommendations(
         if has_coordinates:
             logger.info(f"Building location query for user {user_id} with coordinates {latitude}, {longitude} and radius {radius_km}")
             location_query = _build_location_query(user_id, latitude, longitude, radius_km)
-            logger.info(f"Location query: {location_query}")
+            compiled = location_query.compile(
+                dialect=postgresql.dialect(),
+                compile_kwargs={"literal_binds": True}
+            )
+            logger.info(f"Location query: {compiled}")
             combined_query = entertainment_query.union_all(location_query).subquery()
             final_query = (
                 select(combined_query)
