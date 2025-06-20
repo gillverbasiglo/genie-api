@@ -687,7 +687,7 @@ def _build_location_query(user_id: str, latitude: Optional[float], longitude: Op
             func.ST_DWithin(
                 Recommendation.location_geom,
                 func.ST_GeomFromEWKT(point_wkt),
-                radius_km * 1000
+                radius_km
             )
         )
         # Update distance calculation for filtered results
