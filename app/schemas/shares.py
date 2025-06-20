@@ -1,6 +1,6 @@
 # schemas.py
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Any, Dict, Optional, List, Union
 from datetime import datetime
 
 from app.schemas.users import MeUserResponse
@@ -26,10 +26,12 @@ class ShareListResponse(BaseModel):
     title: Optional[str] = None
 
 class ResponsePayload(BaseModel):
-    success: bool
-    message: str
+    success: Optional[bool] = None
+    message: Optional[str] = None
     apnsId: Optional[str] = None
     apnsUniqueId: Optional[str] = None
+    error: Optional[str] = None
+    details: Optional[Union[str, Dict[str, Any]]] = None
 
 class NotificationResponse(BaseModel):
     device_token: str
