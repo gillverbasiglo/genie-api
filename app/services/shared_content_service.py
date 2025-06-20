@@ -206,9 +206,36 @@ async def share_content(
         notification_responses = []
 
     # Map push notification responses to schema
-    notification_response_models = [
-        NotificationResponse(**response) for response in notification_responses
-    ]
+    notification_response_models = []
+    for response in notification_responses:
+        device_token = response.get("device_token")
+        status_code = response.get("status_code")
+        error = response.get("error")
+        raw_payload = response.get("response")
+
+        parsed_response = None
+
+        # Try to parse response if it's a string
+        if isinstance(raw_payload, str):
+            try:
+                parsed_response = json.loads(raw_payload)
+            except json.JSONDecodeError:
+                parsed_response = {"message": raw_payload}
+        elif isinstance(raw_payload, dict):
+            parsed_response = raw_payload
+        else:
+            parsed_response = {"message": str(raw_payload)}
+
+        # Ensure ResponsePayload is shaped correctly
+        try:
+            notification_response_models.append(NotificationResponse(
+                device_token=device_token,
+                status_code=status_code,
+                error=error,
+                response=parsed_response
+            ))
+        except Exception as e:
+            logger.warning(f"Skipping invalid notification response: {response}, error: {e}")
 
     return ShareResponse(
         id=share.id,
