@@ -794,9 +794,10 @@ async def get_user_recommendations(
             #     .offset(skip)
             #     .limit(limit)
             # )
+            entertainment_subquery = entertainment_query.subquery()
             final_entertainment_query = (
-                select(entertainment_query.subquery())
-                .order_by(entertainment_query.subquery().c.category.in_(["movies", "tv_shows"]).desc())
+                select(entertainment_subquery)
+                .order_by(entertainment_subquery.c.category.in_(["movies", "tv_shows"]).desc())
                 .offset(skip)
                 .limit(limit)
             )
