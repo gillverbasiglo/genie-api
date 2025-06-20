@@ -771,10 +771,16 @@ async def get_user_recommendations(
 
         # Build queries
         entertainment_query = _build_entertainment_query(user_id)
-        location_query = _build_location_query(user_id, latitude, longitude, radius_km)
+        logger.info(f"Entertainment query: {entertainment_query}")
+        logger.info(f"Has coordinates: {has_coordinates}")
+        logger.info(f"Latitude: {latitude}")
+        logger.info(f"Longitude: {longitude}")
+        logger.info(f"Radius: {radius_km}")
 
         # Execute appropriate query based on coordinates
         if has_coordinates:
+            logger.info(f"Building location query for user {user_id} with coordinates {latitude}, {longitude} and radius {radius_km}")
+            location_query = _build_location_query(user_id, latitude, longitude, radius_km)
             combined_query = entertainment_query.union_all(location_query).subquery()
             final_query = (
                 select(combined_query)
@@ -783,6 +789,7 @@ async def get_user_recommendations(
                 .limit(limit)
             )
         else:
+            logger.info(f"Building entertainment query for user {user_id}")
             entertainment_subquery = entertainment_query.subquery()
             final_query = (
                 select(entertainment_subquery)
@@ -806,9 +813,12 @@ async def get_user_recommendations(
             else:
                 location_recommendations.append(recommendation_data)
         
+        logger.info(f"Entertainment recommendations: {entertainment_recommendations}")
+        logger.info(f"Location recommendations: {location_recommendations}")
+        
         # Trigger generation if no location recommendations found
         if not location_recommendations and has_coordinates:
-            logger.info(f"No location recommendations found for user {user_id}, triggering custom recommendations generation")
+            logger.info(f"No location recommendations found for user {user_id}, triggering custom recommendations generation for {neighborhood} with coordinates {latitude}, {longitude} and time of day {time_of_day}")
             generate_custom_recommendations.delay(
                 user_id=user_id,
                 neighborhood=neighborhood,
