@@ -802,7 +802,12 @@ async def get_user_recommendations(
             )
             entertainment_results = await db.execute(final_entertainment_query)
             entertainment_recommendations = entertainment_results.scalars().all()
-            location_results = await db.execute(location_query.offset(skip).limit(limit))
+            final_location_query = (
+                select(location_query)
+                .offset(skip)
+                .limit(limit)
+            )
+            location_results = await db.execute(final_location_query)
             location_recommendations = location_results.scalars().all()
             results = entertainment_recommendations + location_recommendations
         else:
