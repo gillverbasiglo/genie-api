@@ -781,6 +781,7 @@ async def get_user_recommendations(
         if has_coordinates:
             logger.info(f"Building location query for user {user_id} with coordinates {latitude}, {longitude} and radius {radius_km}")
             location_query = _build_location_query(user_id, latitude, longitude, radius_km)
+            logger.info(f"Location query: {location_query}")
             combined_query = entertainment_query.union_all(location_query).subquery()
             final_query = (
                 select(combined_query)
