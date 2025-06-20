@@ -796,19 +796,19 @@ async def get_user_recommendations(
             # )
             final_entertainment_query = (
                 select(entertainment_query.subquery())
-                .order_by(entertainment_query.c.category.in_(["movies", "tv_shows"]).desc())
+                .order_by(entertainment_query.subquery().c.category.in_(["movies", "tv_shows"]).desc())
                 .offset(skip)
                 .limit(limit)
             )
             entertainment_results = await db.execute(final_entertainment_query)
-            entertainment_recommendations = entertainment_results.scalars().all()
+            entertainment_recommendations = entertainment_results.all()
             final_location_query = (
                 select(location_query.subquery())
                 .offset(skip)
                 .limit(limit)
             )
             location_results = await db.execute(final_location_query)
-            location_recommendations = location_results.scalars().all()
+            location_recommendations = location_results.all()
             results = entertainment_recommendations + location_recommendations
         else:
             logger.info(f"Building entertainment query for user {user_id}")
@@ -821,7 +821,7 @@ async def get_user_recommendations(
             )
 
             # Execute query and process results
-            result = await db.execute(final_query.offset(skip).limit(limit))
+            result = await db.execute(final_query)
             results = result.all()
         
         # Separate and process recommendations
