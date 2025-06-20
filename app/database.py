@@ -1,8 +1,6 @@
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 from app.config import settings
 
 # PostgreSQL connection string
@@ -12,8 +10,5 @@ SQLALCHEMY_DATABASE_URL = f"postgresql+psycopg://{settings.db_username}:{setting
 engine = create_async_engine(SQLALCHEMY_DATABASE_URL)
 
 AsyncSessionLocal = async_sessionmaker(autocommit=False, autoflush=False, bind=engine, class_=AsyncSession)
-
-sync_engine = create_engine(SQLALCHEMY_DATABASE_URL)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=sync_engine)
 
 Base = declarative_base()

@@ -2,7 +2,9 @@ import asyncio
 import logging
 from typing import Any, List, Optional
 from sqlalchemy.orm import Session
-from app.database import SessionLocal
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from app.config import settings
 from app.models.recommendations import Recommendation, UserRecommendation
 from app.models.user import User
 from app.services.recommendation_service import stream_genie_recommendations, stream_entertainment_recommendations
@@ -12,6 +14,10 @@ logger = logging.getLogger(__name__)
 
 def get_db() -> Session:
     """Get database session."""
+    SQLALCHEMY_DATABASE_URL = f"postgresql+psycopg://{settings.db_username}:{settings.db_password.get_secret_value()}@{settings.host}:{settings.port}/{settings.database}"
+    sync_engine = create_engine(SQLALCHEMY_DATABASE_URL)
+    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=sync_engine)
+
     db = SessionLocal()
     try:
         return db
