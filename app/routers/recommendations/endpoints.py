@@ -787,13 +787,24 @@ async def get_user_recommendations(
                 compile_kwargs={"literal_binds": True}
             )
             logger.info(f"Location query: {compiled}")
-            combined_query = entertainment_query.union_all(location_query).subquery()
-            final_query = (
-                select(combined_query)
-                .order_by(combined_query.c.category.in_(["movies", "tv_shows"]).desc())
+            # combined_query = entertainment_query.union_all(location_query).subquery()
+            # final_query = (
+            #     select(combined_query)
+            #     .order_by(combined_query.c.category.in_(["movies", "tv_shows"]).desc())
+            #     .offset(skip)
+            #     .limit(limit)
+            # )
+            final_entertainment_query = (
+                select(entertainment_query)
+                .order_by(entertainment_query.c.category.in_(["movies", "tv_shows"]).desc())
                 .offset(skip)
                 .limit(limit)
             )
+            entertainment_results = await db.execute(final_entertainment_query)
+            entertainment_recommendations = entertainment_results.scalars().all()
+            location_results = await db.execute(location_query.offset(skip).limit(limit))
+            location_recommendations = location_results.scalars().all()
+            results = entertainment_recommendations + location_recommendations
         else:
             logger.info(f"Building entertainment query for user {user_id}")
             entertainment_subquery = entertainment_query.subquery()
@@ -804,9 +815,9 @@ async def get_user_recommendations(
                 .limit(limit)
             )
 
-        # Execute query and process results
-        result = await db.execute(final_query)
-        results = result.all()
+            # Execute query and process results
+            result = await db.execute(final_query.offset(skip).limit(limit))
+            results = result.all()
         
         # Separate and process recommendations
         entertainment_recommendations = []
