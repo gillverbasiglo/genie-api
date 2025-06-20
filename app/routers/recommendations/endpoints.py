@@ -795,7 +795,7 @@ async def get_user_recommendations(
             #     .limit(limit)
             # )
             final_entertainment_query = (
-                select(entertainment_query)
+                select(entertainment_query.subquery())
                 .order_by(entertainment_query.c.category.in_(["movies", "tv_shows"]).desc())
                 .offset(skip)
                 .limit(limit)
@@ -803,7 +803,7 @@ async def get_user_recommendations(
             entertainment_results = await db.execute(final_entertainment_query)
             entertainment_recommendations = entertainment_results.scalars().all()
             final_location_query = (
-                select(location_query)
+                select(location_query.subquery())
                 .offset(skip)
                 .limit(limit)
             )
