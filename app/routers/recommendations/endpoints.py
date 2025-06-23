@@ -683,11 +683,13 @@ def _build_location_query(user_id: str, latitude: Optional[float], longitude: Op
     
     if latitude is not None and longitude is not None:
         point_wkt = f'SRID=4326;POINT({longitude} {latitude})'
+        # Convert radius from kilometers to degrees (approximate: 1 degree ≈ 111 km)
+        radius_degrees = radius_km / 111.0
         query = query.where(
             func.ST_DWithin(
                 Recommendation.location_geom,
                 func.ST_GeomFromEWKT(point_wkt),
-                radius_km
+                radius_degrees
             )
         )
         # Update distance calculation for filtered results
