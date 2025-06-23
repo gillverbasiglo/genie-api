@@ -787,13 +787,6 @@ async def get_user_recommendations(
                 compile_kwargs={"literal_binds": True}
             )
             logger.info(f"Location query: {compiled}")
-            # combined_query = entertainment_query.union_all(location_query).subquery()
-            # final_query = (
-            #     select(combined_query)
-            #     .order_by(combined_query.c.category.in_(["movies", "tv_shows"]).desc())
-            #     .offset(skip)
-            #     .limit(limit)
-            # )
             entertainment_subquery = entertainment_query.subquery()
             final_entertainment_query = (
                 select(entertainment_subquery)
