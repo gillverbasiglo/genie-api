@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Path, status, Resp
 from fastapi_cache.decorator import cache
 from google import genai
 from openai import AsyncOpenAI
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from sqlalchemy import select, update, func, null
 from sqlalchemy.sql import Select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,9 +19,6 @@ from enum import Enum
 from tenacity import retry, stop_after_attempt, wait_exponential
 from datetime import datetime, timezone
 from geopy.geocoders import Nominatim
-from geopy.exc import GeocoderTimedOut, GeocoderServiceError
-from shapely.geometry import Point
-from geoalchemy2 import Geometry
 from sqlalchemy.dialects import postgresql
 
 from app.common import get_current_user
