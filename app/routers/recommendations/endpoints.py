@@ -851,7 +851,7 @@ async def get_user_recommendations(
         random.shuffle(entertainment_recommendations)
         random.shuffle(location_recommendations)
         
-        return _interleave_recommendations(entertainment_recommendations, location_recommendations)
+        return _interleave_recommendations(entertainment_recommendations, location_recommendations)[:limit]
         
     except Exception as e:
         logger.error(f"Error fetching user recommendations: {str(e)}")
