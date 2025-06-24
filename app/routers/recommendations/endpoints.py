@@ -823,6 +823,8 @@ async def get_user_recommendations(
         # Separate and process recommendations
         entertainment_recommendations = []
         location_recommendations = []
+
+        logger.info(f"Location query results: {location_recommendations}")
         
         for row in results:
             recommendation_data = _process_recommendation_row(row)
