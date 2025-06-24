@@ -680,16 +680,16 @@ def _build_location_query(user_id: str, latitude: Optional[float], longitude: Op
     
     if latitude is not None and longitude is not None:
         point_wkt = f'SRID=4326;POINT({longitude} {latitude})'
-        # Convert radius from kilometers to degrees (approximate: 1 degree ≈ 111 km)
-        radius_degrees = radius_km / 111.0
+        # Convert radius from kilometers to meters 
+        radius_meters = radius_km * 1000
         query = query.where(
             func.ST_DWithin(
-                Recommendation.location_geom,
-                func.ST_GeomFromEWKT(point_wkt),
-                radius_degrees
+                func.ST_Transform(Recommendation.location_geom, 3857),
+                func.ST_Transform(func.ST_GeomFromEWKT(point_wkt), 3857),
+                radius_meters
             )
         )
-        # Update distance calculation for filtered results
+        # Update distance calculation for filtered results - transform to metric projection for accurate distances
         query = query.with_only_columns(
             UserRecommendation.id.label('user_rec_id'),
             Recommendation.id,
@@ -703,8 +703,8 @@ def _build_location_query(user_id: str, latitude: Optional[float], longitude: Op
             Recommendation.location_geom,
             Recommendation.resource_details,
             func.ST_Distance(
-                Recommendation.location_geom,
-                func.ST_GeomFromEWKT(point_wkt)
+                func.ST_Transform(Recommendation.location_geom, 3857),
+                func.ST_Transform(func.ST_GeomFromEWKT(point_wkt), 3857)
             ).label('distance'),
             UserRecommendation.created_at.label('created_at')
         )
