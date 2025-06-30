@@ -9,6 +9,7 @@ logger = logging.getLogger(__name__)
 # PostgreSQL connection string
 SQLALCHEMY_DATABASE_URL = f"postgresql+psycopg://{settings.db_username}:{settings.db_password.get_secret_value()}@{settings.host}:{settings.port}/{settings.database}"
 
+print("🚀 database.py loaded")
 # Log the connection string (mask password for safety)
 masked_url = SQLALCHEMY_DATABASE_URL.replace(
     settings.db_password.get_secret_value(), "*****"
