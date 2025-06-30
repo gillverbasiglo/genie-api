@@ -14,6 +14,10 @@ from app.schemas.invitation import ContactCheckResponse
 from app.schemas.users import UpdateArchetypesAndKeywordsRequest, UserCreate
 
 logger = logging.getLogger(__name__)
+# Configure SQLAlchemy logging
+logging.getLogger('sqlalchemy.engine').setLevel(logging.INFO)
+logging.getLogger('sqlalchemy.pool').setLevel(logging.DEBUG)
+logging.getLogger('sqlalchemy.dialects').setLevel(logging.INFO)
 
 async def get_user_by_id(db: AsyncSession, user_id: str) -> Optional[User]:
     """
