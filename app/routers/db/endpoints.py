@@ -1,12 +1,12 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
-from app.database import AsyncSessionLocal
+from app.init_db import get_db
 
 router = APIRouter(prefix="/debug", tags=["Debug"])
 
 @router.get("/db-test")
-async def db_test(db: AsyncSession = Depends(AsyncSessionLocal)):
+async def db_test(db: AsyncSession = Depends(get_db)):
     """
     Test if database connection is working.
     """
