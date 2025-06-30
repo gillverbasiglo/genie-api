@@ -8,12 +8,7 @@ SQLALCHEMY_DATABASE_URL = f"postgresql+psycopg://{settings.db_username}:{setting
 
 # Create an async engine
 engine = create_async_engine(
-    SQLALCHEMY_DATABASE_URL,
-    pool_size=10,          # more than default (default is 5)
-    max_overflow=20,      # allow some overflow
-    pool_timeout=30,      # wait 30s before giving up
-    echo=False,           # can be True for debugging
-    future=True
+    SQLALCHEMY_DATABASE_URL
     )
 
 AsyncSessionLocal = async_sessionmaker(autocommit=False, autoflush=False, bind=engine, class_=AsyncSession)
