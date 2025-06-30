@@ -1,4 +1,4 @@
-from .database import AsyncSessionLocal
+from app.database import AsyncSessionLocal
 from typing import AsyncGenerator
 
 async def get_db() -> AsyncGenerator:
