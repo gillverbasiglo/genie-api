@@ -25,6 +25,7 @@ from app.routers.notifications.endpoints import router as NotificationsEndpoints
 from app.routers.mem0.endpoints import router as MemoriesEndpoints
 from app.routers.llm.endpoints import router as LLMEndpoints
 
+from app.routers.db.endpoints import router as DBEndpoints
 logger = logging.getLogger(__name__)
 
 # Cache the JWKS for 1 hour to avoid fetching it on every request
@@ -46,6 +47,7 @@ app.include_router(ChatEndPoints)
 app.include_router(NotificationsEndpoints)
 app.include_router(MemoriesEndpoints)
 app.include_router(LLMEndpoints)
+app.include_router(DBEndpoints)
 
 # Global clients
 groq_client = AsyncOpenAI(

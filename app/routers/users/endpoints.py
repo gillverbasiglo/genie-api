@@ -62,6 +62,7 @@ async def get_current_user_info_api(
         HTTPException: If retrieval fails
     """
     try:
+        logger.info(f"Getting current user info for user_id={current_user['uid']}")
         return await get_current_user_info(current_user["uid"], db)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -112,12 +113,15 @@ async def register_user_api(
     Raises:
         HTTPException: If registration fails
     """
+    logger.info(f"Starting registration for user_id={current_user['uid']}, email={user_data.email}, phone_number={user_data.phone_number}")
     try:
         response = await register_user(user_data, current_user["uid"], db)
         ip_address = await get_user_ip_address(request)
         time_of_day = get_time_of_day()  # Get time of day based on server time
         generate_user_recommendations.delay(current_user["uid"], ip_address, time_of_day)
         return response
+    except HTTPException as http_exc:
+        raise http_exc  # Re-raise known application errors directly
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
