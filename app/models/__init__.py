@@ -9,5 +9,7 @@ from .friends.friend_requests import FriendRequest
 from .friends.user_blocks import UserBlock
 from .friends.user_reports import UserReport
 from .recommendations import Recommendation, UserRecommendation
+from .llm.llm_chat_message import LLMChatMessage
+from .llm.llm_chat_session import LLMChatSession
 
-__all__ = ["InvitationCode", "Invitation", "User", "DeviceToken", "Notification", "Share", "FriendRequest", "Friend", "UserBlock", "UserReport", "Recommendation", "UserRecommendation"]
+__all__ = ["InvitationCode", "Invitation", "User", "DeviceToken", "Notification", "Share", "FriendRequest", "Friend", "UserBlock", "UserReport", "Recommendation", "UserRecommendation", "LLMChatMessage", "LLMChatSession"]
