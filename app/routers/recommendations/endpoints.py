@@ -771,11 +771,6 @@ async def get_user_recommendations(
 
         # Build queries
         entertainment_query = _build_entertainment_query(user_id)
-        logger.info(f"Entertainment query: {entertainment_query}")
-        logger.info(f"Has coordinates: {has_coordinates}")
-        logger.info(f"Latitude: {latitude}")
-        logger.info(f"Longitude: {longitude}")
-        logger.info(f"Radius: {radius_km}")
 
         # Execute appropriate query based on coordinates
         if has_coordinates:
@@ -820,8 +815,6 @@ async def get_user_recommendations(
         # Separate and process recommendations
         entertainment_recommendations = []
         location_recommendations = []
-
-        logger.info(f"Location query results: {location_recommendations}")
         
         for row in results:
             recommendation_data = _process_recommendation_row(row)
@@ -829,9 +822,6 @@ async def get_user_recommendations(
                 entertainment_recommendations.append(recommendation_data)
             else:
                 location_recommendations.append(recommendation_data)
-        
-        logger.info(f"Entertainment recommendations: {entertainment_recommendations}")
-        logger.info(f"Location recommendations: {location_recommendations}")
         
         # Trigger generation if no location recommendations found
         if not location_recommendations and has_coordinates:
