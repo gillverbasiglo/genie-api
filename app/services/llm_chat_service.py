@@ -5,7 +5,7 @@ from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.llm.llm_chat_session import LLMChatSession
 from app.models.llm.llm_chat_message import LLMChatMessage
-from app.schemas.llm_chat import SaveChatRequest, ChatMessageResponse
+from app.schemas.llm_chat import SaveChatRequest, ChatMessageResponse, SessionWithMessagesResponse
 from sqlalchemy.orm import selectinload
 from sqlalchemy import func, select
 
@@ -155,3 +155,54 @@ async def get_chat_messages(session_id: str, user_id: str, limit: int, offset: i
         "total": total,
         "messages": response_messages
     }
+
+async def get_user_sessions_with_preview_messages(user_id: str, db: AsyncSession):
+    # Fetch all sessions for the user
+    session_result = await db.execute(
+        select(LLMChatSession)
+        .where(LLMChatSession.user_id == user_id)
+        .order_by(LLMChatSession.updated_at.desc())
+    )
+    sessions = session_result.scalars().all()
+    session_ids = [s.id for s in sessions]
+    if not session_ids:
+        return []
+
+    response = []
+    for session in sessions:
+        # Fetch total message count
+        total_result = await db.execute(
+            select(func.count(LLMChatMessage.id))
+            .where(LLMChatMessage.session_id == session.id)
+        )
+        total_count = total_result.scalar()
+
+        # Fetch up to 5 latest messages
+        msg_result = await db.execute(
+            select(LLMChatMessage)
+            .where(LLMChatMessage.session_id == session.id)
+            .order_by(LLMChatMessage.created_at.desc())
+            .limit(5)
+        )
+        messages = list(reversed(msg_result.scalars().all()))  # Oldest → Newest
+
+        response.append(SessionWithMessagesResponse(
+            id=session.id,
+            title=session.title,
+            category=session.category,
+            created_at=session.created_at,
+            updated_at=session.updated_at,
+            total=total_count,
+            offset=0,
+            limit=len(messages),  # Actual number of messages fetched
+            messages=[
+                ChatMessageResponse(
+                    id=m.id,
+                    sender=m.sender,
+                    content=m.content,
+                    created_at=m.created_at
+                ) for m in messages
+            ]
+        ))
+
+    return response

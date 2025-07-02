@@ -3,8 +3,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from app.common import get_current_user
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.init_db import get_db
-from app.schemas.llm_chat import PaginatedChatMessages, SaveChatRequest, SaveChatResponse
-from app.services.llm_chat_service import save_chat_message, get_chat_messages
+from app.schemas.llm_chat import PaginatedChatMessages, SaveChatRequest, SaveChatResponse, SessionWithMessagesResponse
+from app.services.llm_chat_service import get_user_sessions_with_preview_messages, save_chat_message, get_chat_messages
 
 # Configure logger for LLM endpoints
 logger = logging.getLogger(__name__)
@@ -39,7 +39,7 @@ async def save_chat(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/getMessages", response_model=list[PaginatedChatMessages])
+@router.get("/getMessages", response_model=PaginatedChatMessages)
 async def get_chats(
     session_id: str,
     limit: int = Query(20, ge=1),
@@ -68,3 +68,15 @@ async def get_chats(
     except Exception as e:
         logger.error(f"Error retrieving chat messages for session {session_id}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/sessionsWithMessages", response_model=list[SessionWithMessagesResponse])
+async def get_sessions_with_preview_messages(
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    try:
+        result = await get_user_sessions_with_preview_messages(current_user["uid"], db)
+        return result
+    except Exception as e:
+        logger.error(f"Error fetching sessions with preview messages: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Unable to fetch session previews.")

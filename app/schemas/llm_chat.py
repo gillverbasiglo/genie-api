@@ -22,9 +22,22 @@ class ChatMessageResponse(BaseModel):
 
 class PaginatedChatMessages(BaseModel):
     total: int
+    offset: int
+    limit: int
     messages: List[ChatMessageResponse]
 
 class SaveChatResponse(BaseModel):
     message: str
     session_id: str
+
+class SessionWithMessagesResponse(BaseModel):
+    id: str
+    title: Optional[str]
+    category: Optional[str]
+    created_at: datetime
+    updated_at: datetime
+    total: int
+    offset: int
+    limit: int
+    messages: list[ChatMessageResponse]
 
