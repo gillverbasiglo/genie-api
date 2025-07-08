@@ -36,8 +36,6 @@ class MessageHandler:
             WebSocketMessageType.MESSAGE_UPDATE: self.handle_message_status_update,
             WebSocketMessageType.TYPING_STATUS: self.handle_typing_status,
             WebSocketMessageType.USER_STATUS: self.handle_user_status,
-            WebSocketMessageType.CHAT_GENIE_SUMMON: self.handle_chat_genie_summon,
-            WebSocketMessageType.CHAT_GENIE_SUMMON_IOS: self.handle_chat_genie_summon_ios,
             WebSocketMessageType.DRAG_END: self.handle_drag_end,
             WebSocketMessageType.DRAG_UPDATE: self.handle_drag_update
         }
@@ -66,76 +64,6 @@ class MessageHandler:
                     return result
         return None
 
-    async def handle_chat_genie_summon(self, message_data: dict, user_id: str):
-        """
-        Handle chat genie summon requests.
-
-        Args:
-            message_data (dict): Message data containing the summon request
-            user_id (str): ID of the user making the request
-        """
-        user_1_id = message_data.get("user_1_id") #sender
-        user_2_id = message_data.get("user_2_id") #receiver
-        query = message_data.get("query")
-
-        # Get history between the two users
-        #history = await get_history(user_1_id, user_2_id, self.db)
-
-        """try:
-            async for chunk in call_recommendation_api(self.db, user_1_id, user_2_id, query):
-                await self.manager.send_personal_message(user_1_id, {
-                    "type": WebSocketMessageType.CHAT_GENIE_SUMMON,
-                    "message": chunk
-                })
-                await self.manager.send_personal_message(user_2_id, {
-                    "type": WebSocketMessageType.CHAT_GENIE_SUMMON,
-                    "message": chunk
-                })
-        except Exception as e:
-            logger.error(f"Streaming recommendation API failed: {e}")
-            await self.manager.send_personal_message(user_1_id, {
-                "type": "ERROR",
-                "message": "Failed to get response from genie."
-            })
-            await self.manager.send_personal_message(user_2_id, {
-                "type": "ERROR",
-                "message": "Failed to get response from genie."
-            })"""
-        """try:
-            result = await call_recommendation_api(self.db, user_1_id, user_2_id, query)
-            logger.info(f"Result: {result}")
-            structured_result = self.extract_result_only(result)
-            await self.manager.send_personal_message(user_1_id, {
-                "type": WebSocketMessageType.CHAT_GENIE_SUMMON,
-                "message": structured_result
-            })
-            await self.manager.send_personal_message(user_2_id, {
-                "type": WebSocketMessageType.CHAT_GENIE_SUMMON,
-                "message": structured_result
-            })
-
-        except Exception as e:
-            logger.error(f"Recommendation API failed: {e}")
-            await self.manager.send_personal_message(user_1_id, {
-                "type": "ERROR",
-                "message": "Failed to get response from genie."
-            })
-            await self.manager.send_personal_message(user_2_id, {
-                "type": "ERROR",
-                "message": "Failed to get response from genie."
-            })"""
-
-    async def handle_chat_genie_summon_ios(self, message_data: dict, user_id: str):
-        receiver_id = message_data.get("receiver_id")
-        message = message_data.get("message")
-        logger.info("handle_chat_genie_summon_ios")
-        # logger.info(f"Message: {message}")
-
-        await self.manager.send_personal_message(receiver_id, {
-                "type": WebSocketMessageType.CHAT_GENIE_SUMMON_IOS,
-                "message": message
-            })
-     
     async def handle_private_chat_message(self, message_data: dict, user_id: str):
         """
         Process and store private chat messages.

@@ -1,6 +1,6 @@
 import enum
 import uuid
-from sqlalchemy import JSON, Column, Integer, String, ForeignKey, Enum as SQLAlchemyEnum, DateTime, Text, func
+from sqlalchemy import JSON, Boolean, Column, Integer, String, ForeignKey, Enum as SQLAlchemyEnum, DateTime, Text, func
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from sqlalchemy.dialects.postgresql import ENUM
@@ -34,7 +34,8 @@ class Message(Base):
     content = Column(Text, nullable=True)  # Text content for text messages
     media_url = Column(String, nullable=True)  # URL or path to media content for non-text messages
     message_meta  = Column(JSON, nullable=True)  # Additional metadata for media messages (e.g., file size, dimensions)
-
+    is_from_genie = Column(Boolean, nullable=False, default=False)
+    
     # Message state and timestamps
     status = Column(ENUM(MessageStatus), default=MessageStatus.SENT)  # Current delivery status
     created_at = Column(DateTime, server_default=func.now())  # Message creation timestamp
