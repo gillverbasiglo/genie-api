@@ -77,7 +77,7 @@ class SecretsManager:
         For RDS instances, the secret is automatically formatted to include
         username, password, host, port, dbname, etc.
         """
-        return self.get_json_secret(os.environ.get('DATABASE_SECRETS_NAME', 'rds!db-3805dfcb-d481-41ee-9f16-1b6fb710913e'))
+        return self.get_json_secret(os.environ.get('DATABASE_SECRETS_NAME', 'db-staging'))
     
     def get_api_key(self, service_name: str) -> str:
         """Get API key for a specific service"""

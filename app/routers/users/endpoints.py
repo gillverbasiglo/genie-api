@@ -62,6 +62,7 @@ async def get_current_user_info_api(
         HTTPException: If retrieval fails
     """
     try:
+        logger.info(f"Getting current user info for user_id={current_user['uid']}")
         return await get_current_user_info(current_user["uid"], db)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

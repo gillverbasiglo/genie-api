@@ -14,6 +14,10 @@ from app.schemas.invitation import ContactCheckResponse
 from app.schemas.users import UpdateArchetypesAndKeywordsRequest, UserCreate
 
 logger = logging.getLogger(__name__)
+# Configure SQLAlchemy logging
+logging.getLogger('sqlalchemy.engine').setLevel(logging.INFO)
+logging.getLogger('sqlalchemy.pool').setLevel(logging.DEBUG)
+logging.getLogger('sqlalchemy.dialects').setLevel(logging.INFO)
 
 async def get_user_by_id(db: AsyncSession, user_id: str) -> Optional[User]:
     """
@@ -131,6 +135,7 @@ async def get_current_user_info(user_id: str, db: AsyncSession):
     Raises:
         HTTPException: If user is not found
     """
+    logger.info(f"Getting user info for user_id={user_id}")
     stmt = select(User).where(User.id == user_id)
     result = await db.execute(stmt)
     user = result.scalar_one_or_none()

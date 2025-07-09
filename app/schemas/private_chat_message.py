@@ -35,6 +35,7 @@ class MessageBase(BaseModel):
         sender_id: Unique identifier of the message sender
         receiver_id: Unique identifier of the message recipient
         message_type: Type of message content (text, image, etc.)
+        is_from_genie: True, if the message is from genie. Default: false
         content: Optional text content for text messages
         media_url: Optional URL for media content (images, videos, etc.)
         metadata: Optional dictionary for additional message metadata
@@ -45,6 +46,7 @@ class MessageBase(BaseModel):
     sender_id: str
     receiver_id: str
     message_type: MessageType
+    is_from_genie: bool = False
     content: Optional[str] = None
     media_url: Optional[HttpUrl] = None
     message_meta: Optional[Dict] = None
