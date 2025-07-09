@@ -101,26 +101,28 @@ async def get_paginated_private_messages(
 
 async def get_unread_message_count(
     db: AsyncSession,
-    receiver_id: str
-):
+    user_id: str,
+    friend_id: str
+) -> int:
     """
-    Count the number of unread messages for a specific user.
-    
+    Count the number of unread messages sent from friend_id to user_id.
+
     Args:
         db (AsyncSession): Database session
-        receiver_id (str): ID of the user to count unread messages for
-        
+        user_id (str): ID of the user receiving the messages
+        friend_id (str): ID of the user who sent the messages
+
     Returns:
-        int: Number of unread messages
+        int: Number of unread messages from friend_id to user_id
     """
-    # Count messages that are not marked as READ
     query = select(func.count(Message.id)).where(
         and_(
-            Message.receiver_id == receiver_id,
+            Message.receiver_id == user_id,
+            Message.sender_id == friend_id,
             Message.status != MessageStatus.READ
         )
     )
-    
+
     result = await db.execute(query)
     return result.scalar_one()
 

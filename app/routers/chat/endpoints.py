@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.init_db import get_db
 from app.schemas.private_chat_message import PaginatedMessagesResponse
 from app.services.chat_service import get_paginated_private_messages, get_unread_message_count
+from app.common import get_current_user
 
 # Configure logger for this module
 logger = logging.getLogger(__name__)
@@ -17,7 +18,8 @@ async def get_private_chat_messages(
     receiver_id: str,
     skip: int = Query(0, ge=0),
     limit: int = Query(10, le=100),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
 ):
     """
     Retrieve paginated private chat messages between two users.
@@ -39,7 +41,8 @@ async def get_private_chat_messages(
 async def unread_message_count(
     user_id: str,
     friend_id: str,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
 ):
     """
     Get the count of unread messages between two users.
