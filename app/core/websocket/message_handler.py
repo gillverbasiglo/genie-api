@@ -79,6 +79,7 @@ class MessageHandler:
         """
         receiver_id = message_data.get("receiver_id")
         content = message_data.get("content")
+        is_from_genie = message_data.get("is_from_genie")
         timestamp = datetime.now()
 
         # Create and store new message in database
@@ -89,6 +90,7 @@ class MessageHandler:
                 receiver_id=receiver_id,
                 message_type=MessageType.TEXT,
                 content=content,
+                is_from_genie=is_from_genie,
                 media_url=None,
                 metadata=None,
                 status=MessageStatus.SENT,
@@ -109,6 +111,7 @@ class MessageHandler:
                 "sender_id": user_id, 
                 "receiver_id": receiver_id,
                 "content": content, 
+                "is_from_genie": is_from_genie,
                 "status": MessageStatus.SENT, 
                 "timestamp": timestamp_str
             }
