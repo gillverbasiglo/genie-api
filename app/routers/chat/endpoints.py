@@ -18,6 +18,7 @@ async def get_private_chat_messages(
     skip: int = Query(0, ge=0),
     limit: int = Query(10, le=100),
     db: AsyncSession = Depends(get_db)
+    current_user: dict = Depends(get_current_user)
 ):
     """
     Retrieve paginated private chat messages between two users.
@@ -40,6 +41,7 @@ async def unread_message_count(
     user_id: str,
     friend_id: str,
     db: AsyncSession = Depends(get_db)
+    current_user: dict = Depends(get_current_user)
 ):
     """
     Get the count of unread messages between two users.

@@ -8,7 +8,10 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/debug", tags=["Debug"])
 
 @router.get("/db-test")
-async def db_test(db: AsyncSession = Depends(get_db)):
+async def db_test(
+    db: AsyncSession = Depends(get_db)
+    current_user: dict = Depends(get_current_user)
+    ):
     """
     Test if database connection is working.
     """
