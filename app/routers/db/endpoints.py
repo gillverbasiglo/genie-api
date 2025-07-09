@@ -2,6 +2,7 @@ import logging
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
+from app.common import get_current_user
 from app.init_db import get_db
 
 logger = logging.getLogger(__name__)
@@ -9,7 +10,7 @@ router = APIRouter(prefix="/debug", tags=["Debug"])
 
 @router.get("/db-test")
 async def db_test(
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user)
     ):
     """
