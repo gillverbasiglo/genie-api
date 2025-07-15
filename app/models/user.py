@@ -45,3 +45,4 @@ class User(Base):
 
     # Relationships
     recommendations = relationship("UserRecommendation", back_populates="user", lazy="selectin")
+    locations = relationship("Location", back_populates="user", lazy="selectin")

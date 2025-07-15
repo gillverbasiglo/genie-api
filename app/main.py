@@ -24,6 +24,7 @@ from app.routers.chat.endpoints import router as ChatEndPoints
 from app.routers.notifications.endpoints import router as NotificationsEndpoints
 from app.routers.mem0.endpoints import router as MemoriesEndpoints
 from app.routers.llm.endpoints import router as LLMEndpoints
+from app.routers.location.endpoints import router as LocationEndpoints
 
 from app.routers.db.endpoints import router as DBEndpoints
 logger = logging.getLogger(__name__)
@@ -47,6 +48,7 @@ app.include_router(ChatEndPoints)
 app.include_router(NotificationsEndpoints)
 app.include_router(MemoriesEndpoints)
 app.include_router(LLMEndpoints)
+app.include_router(LocationEndpoints)
 app.include_router(DBEndpoints)
 
 # Global clients
