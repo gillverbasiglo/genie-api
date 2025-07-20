@@ -11,5 +11,6 @@ from .friends.user_reports import UserReport
 from .recommendations import Recommendation, UserRecommendation
 from .llm.llm_chat_message import LLMChatMessage
 from .llm.llm_chat_session import LLMChatSession
+from .location import Location
 
-__all__ = ["InvitationCode", "Invitation", "User", "DeviceToken", "Notification", "Share", "FriendRequest", "Friend", "UserBlock", "UserReport", "Recommendation", "UserRecommendation", "LLMChatMessage", "LLMChatSession"]
+__all__ = ["InvitationCode", "Invitation", "User", "DeviceToken", "Notification", "Share", "FriendRequest", "Friend", "UserBlock", "UserReport", "Recommendation", "UserRecommendation", "LLMChatMessage", "LLMChatSession", "Location"]
