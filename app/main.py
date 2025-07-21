@@ -25,6 +25,7 @@ from app.routers.notifications.endpoints import router as NotificationsEndpoints
 from app.routers.mem0.endpoints import router as MemoriesEndpoints
 from app.routers.llm.endpoints import router as LLMEndpoints
 from app.routers.location.endpoints import router as LocationEndpoints
+from app.routers.webhook.endpoints import router as WebhookEndpoints
 
 from app.routers.db.endpoints import router as DBEndpoints
 logger = logging.getLogger(__name__)
@@ -50,6 +51,7 @@ app.include_router(MemoriesEndpoints)
 app.include_router(LLMEndpoints)
 app.include_router(LocationEndpoints)
 app.include_router(DBEndpoints)
+app.include_router(WebhookEndpoints)
 
 # Global clients
 groq_client = AsyncOpenAI(
