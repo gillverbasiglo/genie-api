@@ -13,16 +13,48 @@ from enum import Enum
 logger = logging.getLogger(__name__)
 
 def get_db() -> Session:
-    """Get database session."""
-    SQLALCHEMY_DATABASE_URL = f"postgresql+psycopg://{settings.db_username}:{settings.db_password.get_secret_value()}@{settings.host}:{settings.port}/{settings.database}"
-    sync_engine = create_engine(SQLALCHEMY_DATABASE_URL)
-    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=sync_engine)
+    """Get database session with credential refresh support."""
+    max_retries = 2
+    retry_count = 0
+    db = None
+    
+    while retry_count <= max_retries:
+        try:
+            SQLALCHEMY_DATABASE_URL = f"postgresql+psycopg://{settings.db_username}:{settings.db_password.get_secret_value()}@{settings.host}:{settings.port}/{settings.database}"
+            sync_engine = create_engine(
+                SQLALCHEMY_DATABASE_URL,
+                pool_pre_ping=True,  # Validate connections before use
+                pool_recycle=3600,   # Recycle connections every hour
+            )
+            SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=sync_engine)
 
-    db = SessionLocal()
-    try:
-        return db
-    finally:
-        db.close()
+            db = SessionLocal()
+            # Test the connection
+            db.execute("SELECT 1")
+            return db
+            
+        except Exception as e:
+            if db:
+                db.close()
+                db = None
+            
+            # Check if it's an authentication error
+            error_msg = str(e).lower()
+            if ('authentication' in error_msg or 'password' in error_msg or 'login' in error_msg) and retry_count < max_retries:
+                logger.warning(f"Database authentication failed (retry {retry_count + 1}): {e}")
+                
+                # Clear secrets cache and refresh credentials if in production
+                if settings.environment == "production":
+                    from app.secrets_manager import SecretsManager
+                    secrets_manager = SecretsManager(region_name=settings.aws_region)
+                    secrets_manager.clear_cache()
+                    logger.info("Cleared secrets cache, will retry with fresh credentials")
+                
+                retry_count += 1
+                continue
+            else:
+                logger.error(f"Database connection failed: {e}")
+                raise
 
 async def run_async_recommendations(
     time_of_day: str,
