@@ -17,13 +17,12 @@ class BaseTaskWithRetry(Task):
     def on_failure(self, exc, task_id, args, kwargs, einfo):
         """Log task failure using Celery's task logger."""
         logger.error(
-            "Task failed",
-            exc_info=exc,
-            extra={
-                "task_id": task_id,
-                "args": args,
-                "kwargs": kwargs
-            }
+            "Task failed: %s (task_id: %s, task_args: %s, task_kwargs: %s)",
+            str(exc),
+            task_id,
+            args,
+            kwargs,
+            exc_info=exc
         )
         super().on_failure(exc, task_id, args, kwargs, einfo)
 

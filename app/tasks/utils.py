@@ -2,7 +2,7 @@ import asyncio
 import logging
 from typing import Any, List, Optional
 from sqlalchemy.orm import Session
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from app.config import settings
 from app.models.recommendations import Recommendation, UserRecommendation
@@ -30,7 +30,7 @@ def get_db() -> Session:
 
             db = SessionLocal()
             # Test the connection
-            db.execute("SELECT 1")
+            db.execute(text("SELECT 1"))
             return db
             
         except Exception as e:
