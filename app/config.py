@@ -24,9 +24,10 @@ class Settings(BaseSettings):
     push_notification_url: SecretStr
     GENIE_AI_URL: Optional[str] = None
     mem0_api_key: SecretStr
+    jwt_api_key: SecretStr
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    @field_validator("db_username", "db_password", "groq_api_key", "openai_api_key", "trip_advisor_api_key", "google_api_key", "tavily_api_key", "exa_api_key", "aviation_stack_api_key", "tmdb_api_key",  "push_notification_url", "GENIE_AI_URL", "mem0_api_key", mode="before")
+    @field_validator("db_username", "db_password", "groq_api_key", "openai_api_key", "trip_advisor_api_key", "google_api_key", "tavily_api_key", "exa_api_key", "aviation_stack_api_key", "tmdb_api_key",  "push_notification_url", "GENIE_AI_URL", "mem0_api_key", "jwt_api_key", mode="before")
     @classmethod
     def load_secrets(cls, v, info):
         if info.data.get("environment") == "production":
@@ -58,6 +59,8 @@ class Settings(BaseSettings):
                     v = secrets.get_genie_ai_url()['GENIE_AI_URL']
                 elif info.field_name == "mem0_api_key":
                     v = secrets.get_api_key("mem0")
+                elif info.field_name == "jwt_api_key":
+                    v = secrets.get_api_key("jwt")
                 return v
             except Exception as e:
                 # If there's an error getting secrets, fall back to the env value
