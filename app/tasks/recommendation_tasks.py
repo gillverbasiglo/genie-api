@@ -56,7 +56,6 @@ def generate_user_recommendations(
     )
     
     try:
-        db = get_db()
         recommendations = asyncio.run(
             run_async_recommendations(
                 time_of_day=time_of_day,
@@ -65,7 +64,6 @@ def generate_user_recommendations(
         )
         
         stored_recommendations = store_recommendations(
-            db=db,
             user_id=user_id,
             recommendations_data=recommendations
         )
@@ -121,8 +119,7 @@ def generate_custom_recommendations(
     )
     
     try:
-        db = get_db()
-        user = get_user_by_id(db, user_id)
+        user = get_user_by_id(user_id)
         
         # Get random subsets of archetypes and keywords
         selected_archetypes = get_random_subset(user.archetypes or [], 5)
@@ -166,7 +163,6 @@ def generate_custom_recommendations(
         )
         
         stored_recommendations = store_recommendations(
-            db=db,
             user_id=user_id,
             recommendations_data=recommendations
         )
@@ -218,8 +214,7 @@ def generate_entertainment_recommendations(
     )
 
     try:
-        db = get_db()
-        user = get_user_by_id(db, user_id)
+        user = get_user_by_id(user_id)
         current_month = datetime.now().strftime("%B")
         current_year = datetime.now().strftime("%Y")
 
@@ -230,7 +225,6 @@ def generate_entertainment_recommendations(
         )
         
         stored_recommendations = store_entertainment_recommendations(
-            db=db,
             user_id=user_id,
             recommendations_data=recommendations,
             entertainment_type=entertainment_type

@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from contextlib import contextmanager
 from typing import Any, List, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import create_engine, text
@@ -12,31 +13,42 @@ from enum import Enum
 
 logger = logging.getLogger(__name__)
 
-def get_db() -> Session:
-    """Get database session with credential refresh support."""
+# Global engine to avoid recreating it every time
+_engine = None
+_SessionLocal = None
+
+def _get_engine():
+    """Get or create database engine with credential refresh support."""
+    global _engine, _SessionLocal
     max_retries = 2
     retry_count = 0
-    db = None
     
     while retry_count <= max_retries:
         try:
             SQLALCHEMY_DATABASE_URL = f"postgresql+psycopg://{settings.db_username}:{settings.db_password.get_secret_value()}@{settings.host}:{settings.port}/{settings.database}"
-            sync_engine = create_engine(
-                SQLALCHEMY_DATABASE_URL,
-                pool_pre_ping=True,  # Validate connections before use
-                pool_recycle=3600,   # Recycle connections every hour
-            )
-            SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=sync_engine)
-
-            db = SessionLocal()
+            
+            # Create new engine if it doesn't exist or credentials might have changed
+            if _engine is None:
+                _engine = create_engine(
+                    SQLALCHEMY_DATABASE_URL,
+                    pool_pre_ping=True,  # Validate connections before use
+                    pool_recycle=3600,   # Recycle connections every hour
+                    pool_size=5,
+                    max_overflow=10
+                )
+                _SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=_engine)
+                logger.info("Created new database engine")
+            
             # Test the connection
-            db.execute(text("SELECT 1"))
-            return db
+            with _SessionLocal() as test_session:
+                test_session.execute(text("SELECT 1"))
+            
+            return _engine, _SessionLocal
             
         except Exception as e:
-            if db:
-                db.close()
-                db = None
+            # Reset global engine on error
+            _engine = None
+            _SessionLocal = None
             
             # Check if it's an authentication error
             error_msg = str(e).lower()
@@ -55,6 +67,23 @@ def get_db() -> Session:
             else:
                 logger.error(f"Database connection failed: {e}")
                 raise
+
+@contextmanager
+def get_db():
+    """Get database session context manager with proper lifecycle management."""
+    engine, SessionLocal = _get_engine()
+    session = SessionLocal()
+    try:
+        yield session
+        session.commit()
+        logger.debug("Database session committed successfully")
+    except Exception:
+        session.rollback()
+        logger.error("Database session rolled back due to error")
+        raise
+    finally:
+        session.close()
+        logger.debug("Database session closed")
 
 async def run_async_recommendations(
     time_of_day: str,
@@ -97,14 +126,13 @@ async def run_async_entertainment_recommendations(prompt: str) -> List[dict]:
     return recommendations
 
 def store_recommendations(
-    db: Session,
     user_id: int,
     recommendations_data: List[dict]
 ) -> List[Recommendation]:
     """
-    Store recommendations in the database.
+    Store recommendations in the database using context manager.
     """
-    try:
+    with get_db() as db:
         stored_recommendations = []
         recommendations_result = recommendations_data[0]
         recommendations = recommendations_result["structuredResults"]
@@ -143,12 +171,8 @@ def store_recommendations(
                 db.add(user_recommendation)
                 stored_recommendations.append(recommendation)
         
-        db.commit()
-        return stored_recommendations
-    except Exception as e:
-        db.rollback()
-        logger.error(f"Error storing recommendations: {str(e)}")
-        raise 
+        # Commit happens automatically in context manager
+        return stored_recommendations 
 
 class EntertainmentType(str, Enum):
     """Enum for entertainment content types."""
@@ -156,15 +180,14 @@ class EntertainmentType(str, Enum):
     MOVIES = "Best movies to watch"
 
 def store_entertainment_recommendations(
-    db: Session,
     user_id: int,
     entertainment_type: EntertainmentType,
     recommendations_data: List[dict]
 ) -> List[Recommendation]:
     """
-    Store recommendations in the database.
+    Store entertainment recommendations in the database using context manager.
     """
-    try:
+    with get_db() as db:
         stored_recommendations = []
         
         for rec_data in recommendations_data:
@@ -213,16 +236,13 @@ def store_entertainment_recommendations(
                 db.add(user_recommendation)
                 stored_recommendations.append(recommendation)
         
-        db.commit()
+        # Commit happens automatically in context manager
         return stored_recommendations
-    except Exception as e:
-        db.rollback()
-        logger.error(f"Error storing recommendations: {str(e)}")
-        raise
 
-def get_user_by_id(db: Session, user_id: int) -> Optional[User]:
+def get_user_by_id(user_id: int) -> Optional[User]:
     """
-    Get a user by their unique identifier.
+    Get a user by their unique identifier using context manager.
     """
-    user = db.query(User).get(user_id)
-    return user
+    with get_db() as db:
+        user = db.query(User).get(user_id)
+        return user
