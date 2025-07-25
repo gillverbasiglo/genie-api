@@ -86,9 +86,12 @@ def get_db():
         logger.debug("Database session closed")
 
 async def run_async_recommendations(
+    user_id: str,
     time_of_day: str,
     prompt: str,
     neighborhood: Optional[str] = None,
+    city: Optional[str] = None,
+    country: Optional[str] = None,
     latitude: Optional[float] = None,
     longitude: Optional[float] = None,
     ip_address: Optional[str] = None,
@@ -99,9 +102,12 @@ async def run_async_recommendations(
     recommendations = []
     try:
         async for recommendation in stream_genie_recommendations(
+            user_id=user_id,
             time_of_day=time_of_day,
             prompt=prompt,
             neighborhood=neighborhood,
+            city=city,
+            country=country,
             latitude=latitude,
             longitude=longitude,
             ip_address=ip_address,
@@ -126,7 +132,7 @@ async def run_async_entertainment_recommendations(prompt: str) -> List[dict]:
     return recommendations
 
 def store_recommendations(
-    user_id: int,
+    user_id: str,
     recommendations_data: List[dict]
 ) -> List[Recommendation]:
     """
@@ -134,23 +140,23 @@ def store_recommendations(
     """
     with get_db() as db:
         stored_recommendations = []
-        recommendations_result = recommendations_data[0]
-        recommendations = recommendations_result["structuredResults"]
+        recommendations = recommendations_data
         
         for rec_data in recommendations:
-            places_data = rec_data.get("places", [])
+            places_data = rec_data.get("results", [])
             place_data = places_data[0] if places_data else {}
             if 'photos' in place_data:
-                picture_url = place_data['photos'][0]['medium']
+                picture_url = place_data['photos'][0]['large']
             else:
                 picture_url = None
-            
-            if 'name' in place_data and rec_data.get("llmDescription") != "N/A":
+
+            if 'query' in rec_data and rec_data.get("why_would_you_like_this") != "N/A":
+                print(f"RECOMMENDED PLACE: {rec_data.get('query')}, {rec_data.get('why_would_you_like_this')}, {picture_url}")
                 # Create recommendation
                 recommendation = Recommendation(
-                    category=place_data.get("category", "general"),
-                    prompt=rec_data.get("llmDescription", ""),
-                    search_query=rec_data.get("name"),
+                    category=rec_data.get("category", "general"),
+                    prompt=rec_data.get("why_would_you_like_this", ""),
+                    search_query=place_data.get("name"),
                     place_details=place_data,
                     archetypes=rec_data.get("usedArchetypes", []),
                     keywords=rec_data.get("usedKeywords", []),
@@ -180,7 +186,7 @@ class EntertainmentType(str, Enum):
     MOVIES = "Best movies to watch"
 
 def store_entertainment_recommendations(
-    user_id: int,
+    user_id: str,
     entertainment_type: EntertainmentType,
     recommendations_data: List[dict]
 ) -> List[Recommendation]:
@@ -190,8 +196,7 @@ def store_entertainment_recommendations(
     with get_db() as db:
         stored_recommendations = []
         
-        for rec_data in recommendations_data:
-            recommendation_dict = rec_data.get("result")
+        for recommendation_dict in recommendations_data:
             if recommendation_dict:
                 if entertainment_type == EntertainmentType.TV_SHOWS:
                     category = "tv_shows"
@@ -239,10 +244,19 @@ def store_entertainment_recommendations(
         # Commit happens automatically in context manager
         return stored_recommendations
 
-def get_user_by_id(user_id: int) -> Optional[User]:
+def get_user_by_id(user_id: str) -> Optional[dict]:
     """
-    Get a user by their unique identifier using context manager.
+    Get user data needed for recommendations to avoid DetachedInstanceError.
+    Returns a dict with archetypes and keywords instead of a User object.
     """
     with get_db() as db:
-        user = db.query(User).get(user_id)
-        return user
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            return None
+        
+        # Extract the data while session is active
+        return {
+            'id': user.id,
+            'archetypes': user.archetypes,
+            'keywords': user.keywords
+        }

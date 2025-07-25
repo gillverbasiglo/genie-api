@@ -4,9 +4,15 @@ import httpx
 from dataclasses import dataclass
 from pydantic import BaseModel
 from typing import Dict, Any, AsyncGenerator, Optional, List
+from enum import Enum
 
 from app.schemas.users import Archetype, Keyword
 from app.config import settings
+
+class RecommendationType(str, Enum):
+    PLACE = "place"
+    MOVIE = "movie"
+    MIXED = "mixed"
 
 @dataclass
 class Location:
@@ -33,6 +39,15 @@ class GenieAIRequest(BaseModel):
 class PlacesGenieAIRequest(GenieAIRequest):
     coordinates: Dict[str, Any]
     neighborhood: str
+
+class GenieAIPortalRecommendationRequest(BaseModel):
+    recommendationType: RecommendationType
+    promptCount: int = 1
+    parallelLimit: int = 1
+    neighborhood: str
+    city: str
+    country: str
+    coordinates: Dict[str, float]
 
 class StreamPart(BaseModel):
     type: str
@@ -85,10 +100,44 @@ async def parse_stream_part(line: str) -> Optional[StreamPart]:
     except (ValueError, json.JSONDecodeError):
         return None
 
+
+def generate_jwt_token_for_user(user_id: str, expires_in_hours: Optional[int] = 24) -> str:
+    """
+    Generate JWT token for user.
+
+    Args:
+        user_id: The user ID to include in the token
+        expires_in_hours: Token expiration in hours. None for no expiration.
+
+    Returns:
+        JWT token string
+    """
+    import jwt
+    from datetime import datetime, timedelta, timezone
+
+    jwt_secret = settings.jwt_api_key.get_secret_value()
+
+    payload = {
+        "userId": user_id
+    }
+
+    # Add expiration if specified
+    if expires_in_hours is not None:
+        payload["exp"] = datetime.now(timezone.utc) + timedelta(hours=expires_in_hours)
+
+    # Generate token
+    token = jwt.encode(payload, jwt_secret, algorithm="HS256")
+
+    return token
+
+
 async def stream_genie_recommendations(
+    user_id: str,
     time_of_day: str,
     prompt: str,
     neighborhood: Optional[str] = None,
+    city: Optional[str] = None,
+    country: Optional[str] = None,
     latitude: Optional[float] = None,
     longitude: Optional[float] = None,
     ip_address: Optional[str] = None,
@@ -111,28 +160,31 @@ async def stream_genie_recommendations(
     if ip_address:
         # Get location information from IP
         location = await get_location_from_ip(ip_address)
-        # Create populated neighborhood, latitude, and longitude with location information
+        # Create a populated neighborhood, latitude, and longitude with location information
         neighborhood = location.state
+        city = location.city
+        country = location.country
         latitude = location.latitude
         longitude = location.longitude
     
-    request_data = PlacesGenieAIRequest(
-        model="genie-gemini",
-        group="web",
+    request_data = GenieAIPortalRecommendationRequest(
+        recommendationType=RecommendationType.PLACE,
         neighborhood=neighborhood,
+        city=city,
+        country=country,
         coordinates={
-            "lat": latitude,
-            "lon": longitude
-        },
-        messages=[
-            Message(role="user", parts=[MessagePart(type="text", text=prompt)])
-        ]
+            "latitude": latitude,
+            "longitude": longitude
+        }
     )
+
+    bearer_token = generate_jwt_token_for_user(user_id)
     
     headers = {
         "Accept": "text/event-stream",
         "Content-Type": "application/json",
-        "x-vercel-ai-data-stream": "v1"  # Required for Vercel AI SDK protocol
+        "x-vercel-ai-data-stream": "v1",  # Required for Vercel AI SDK protocol
+        "Authorization": f"Bearer {bearer_token}"
     }
     
     async with httpx.AsyncClient() as client:
@@ -150,7 +202,7 @@ async def stream_genie_recommendations(
                         # Handle different types of stream parts
                         if part.type == "a":  # Tool result part
                             # Extract the structured output from the tool result
-                            if "result" in part.content and part.content["result"] is not None and "structuredResults" in part.content["result"]:
+                            if "result" in part.content and part.content["result"] is not None and "searches" not in part.content["result"]:
                                 yield part.content["result"]
                         elif part.type == "3":  # Error part
                             raise Exception(f"AI Service Error: {part.content}")

@@ -39,7 +39,7 @@ def get_random_subset(items: List[str], count: int = 5) -> List[str]:
 )
 def generate_user_recommendations(
     self,
-    user_id: int,
+    user_id: str,
     ip_address: str,
     time_of_day: str
 ) -> dict:
@@ -97,9 +97,11 @@ def generate_user_recommendations(
 )
 def generate_custom_recommendations(
     self,
-    user_id: int,
+    user_id: str,
     time_of_day: str,
     neighborhood: str,
+    city: str,
+    country: str,
     latitude: float,
     longitude: float,
 ) -> dict:
@@ -119,11 +121,13 @@ def generate_custom_recommendations(
     )
     
     try:
-        user = get_user_by_id(user_id)
+        user_data = get_user_by_id(user_id)
+        if not user_data:
+            raise ValueError(f"User with id {user_id} not found")
         
         # Get random subsets of archetypes and keywords
-        selected_archetypes = get_random_subset(user.archetypes or [], 5)
-        selected_keywords = get_random_subset(user.keywords or [], 5)
+        selected_archetypes = get_random_subset(user_data.get('archetypes') or [], 5)
+        selected_keywords = get_random_subset(user_data.get('keywords') or [], 5)
 
         selected_archetypes = [archetype['name'] for archetype in selected_archetypes]
         selected_keywords = [keyword['name'] for keyword in selected_keywords]
@@ -154,9 +158,12 @@ def generate_custom_recommendations(
         
         recommendations = asyncio.run(
             run_async_recommendations(
+                user_id=user_id,
                 time_of_day=time_of_day,
                 prompt=prompt,
                 neighborhood=neighborhood,
+                city=city,
+                country=country,
                 latitude=latitude,
                 longitude=longitude
             )
@@ -214,7 +221,6 @@ def generate_entertainment_recommendations(
     )
 
     try:
-        user = get_user_by_id(user_id)
         current_month = datetime.now().strftime("%B")
         current_year = datetime.now().strftime("%Y")
 
