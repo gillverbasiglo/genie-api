@@ -212,12 +212,14 @@ async def stream_genie_recommendations(
             raise e
 
 async def stream_entertainment_recommendations(
+    user_id: str,
     prompt: str,
 ) -> AsyncGenerator[Dict[str, Any], None]:
     """
     Stream movie and TV show recommendations from Genie AI service using Vercel AI SDK protocol.
     
     Args:
+        user_id: User ID
         prompt: User's request for entertainment recommendations
         
     Yields:
@@ -228,18 +230,21 @@ async def stream_entertainment_recommendations(
     """
     GENIE_AI_URL = settings.GENIE_AI_URL
     
-    request_data = GenieAIRequest(
-        model="genie-gemini",
-        group="web", 
-        messages=[
-            Message(role="user", parts=[MessagePart(type="text", text=prompt)])
-        ]
+    request_data = GenieAIPortalRecommendationRequest(
+        recommendationType=RecommendationType.MOVIE,
+        neighborhood="",
+        city="",
+        country="",
+        coordinates={}
     )
+
+    bearer_token = generate_jwt_token_for_user(user_id)
     
     headers = {
         "Accept": "text/event-stream",
         "Content-Type": "application/json",
-        "x-vercel-ai-data-stream": "v1"
+        "x-vercel-ai-data-stream": "v1",
+        "Authorization": f"Bearer {bearer_token}"
     }
     
     async with httpx.AsyncClient() as client:
@@ -255,7 +260,7 @@ async def stream_entertainment_recommendations(
                 async for line in response.aiter_lines():
                     if part := await parse_stream_part(line):
                         if part.type == "a":  # Tool result part
-                            if "result" in part.content and part.content["result"] is not None and "result" in part.content["result"]:
+                            if "result" in part.content and part.content["result"] is not None and "searches" not in part.content["result"]:
                                 yield part.content["result"]
                         elif part.type == "3":  # Error part
                             raise Exception(f"AI Service Error: {part.content}")

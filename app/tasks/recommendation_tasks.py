@@ -115,6 +115,8 @@ def generate_custom_recommendations(
             "user_id": user_id,
             "time_of_day": time_of_day,
             "neighborhood": neighborhood,
+            "city": city,
+            "country": country,
             "latitude": latitude,
             "longitude": longitude,
         }
@@ -207,7 +209,7 @@ def generate_custom_recommendations(
 )
 def generate_entertainment_recommendations(
     self,
-    user_id: int,
+    user_id: str,
     entertainment_type: EntertainmentType,
 ) -> dict:
     """
@@ -227,7 +229,7 @@ def generate_entertainment_recommendations(
         prompt = f"{entertainment_type} on {current_month} {current_year}"
 
         recommendations = asyncio.run(
-            run_async_entertainment_recommendations(prompt)
+            run_async_entertainment_recommendations(user_id, prompt)
         )
         
         stored_recommendations = store_entertainment_recommendations(

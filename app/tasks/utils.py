@@ -118,13 +118,13 @@ async def run_async_recommendations(
         raise
     return recommendations
 
-async def run_async_entertainment_recommendations(prompt: str) -> List[dict]:
+async def run_async_entertainment_recommendations(user_id: str, prompt: str) -> List[dict]:
     """
     Run the async entertainment recommendation service and collect all results.
     """
     recommendations = []
     try:
-        async for recommendation in stream_entertainment_recommendations(prompt):
+        async for recommendation in stream_entertainment_recommendations(user_id, prompt):
             recommendations.append(recommendation)
     except Exception as e:
         logger.error(f"Error in entertainment recommendation stream: {str(e)}")
@@ -195,18 +195,20 @@ def store_entertainment_recommendations(
     """
     with get_db() as db:
         stored_recommendations = []
-        
+        print(f"RECOMMENDATION DATA: {recommendations_data}")
         for recommendation_dict in recommendations_data:
-            if recommendation_dict:
-                if entertainment_type == EntertainmentType.TV_SHOWS:
+            if recommendation_dict.get('result', None):
+                recommendation_dict = recommendation_dict.get('result')
+                media_type = recommendation_dict.get("media_type")
+                if media_type == "tv":
                     category = "tv_shows"
-                    picture_url = recommendation_dict.get("backdrop_path")
+                    picture_url = recommendation_dict.get("backdrop_path") or recommendation_dict.get("poster_path")
                     name = (
                         recommendation_dict.get("original_name") or 
                         recommendation_dict.get("title") or
                         recommendation_dict.get("name")
                     )
-                elif entertainment_type == EntertainmentType.MOVIES:
+                elif media_type == "movie":
                     category = "movies"
                     picture_url = recommendation_dict.get("poster_path")
                     name = (
@@ -218,7 +220,7 @@ def store_entertainment_recommendations(
                 # Create recommendation
                 recommendation = Recommendation(
                     category=category,
-                    prompt=recommendation_dict.get("overview", ""),
+                    prompt=recommendation_dict.get("why_would_you_like_this", ""),
                     search_query=name,
                     place_details=None,
                     archetypes=[recommendation_dict.get("usedArchetypes", [])],
