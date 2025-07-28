@@ -18,7 +18,7 @@ _engine = None
 _SessionLocal = None
 
 def _get_engine():
-    """Get or create database engine with credential refresh support."""
+    """Get or create a database engine with credential refresh support."""
     global _engine, _SessionLocal
     max_retries = 2
     retry_count = 0
@@ -27,7 +27,7 @@ def _get_engine():
         try:
             SQLALCHEMY_DATABASE_URL = f"postgresql+psycopg://{settings.db_username}:{settings.db_password.get_secret_value()}@{settings.host}:{settings.port}/{settings.database}"
             
-            # Create new engine if it doesn't exist or credentials might have changed
+            # Create a new engine if it doesn't exist or credentials might have changed
             if _engine is None:
                 _engine = create_engine(
                     SQLALCHEMY_DATABASE_URL,
@@ -70,7 +70,7 @@ def _get_engine():
 
 @contextmanager
 def get_db():
-    """Get database session context manager with proper lifecycle management."""
+    """Get a database session context manager with proper lifecycle management."""
     engine, SessionLocal = _get_engine()
     session = SessionLocal()
     try:
@@ -118,13 +118,13 @@ async def run_async_recommendations(
         raise
     return recommendations
 
-async def run_async_entertainment_recommendations(user_id: str, prompt: str) -> List[dict]:
+async def run_async_entertainment_recommendations(user_id: str) -> List[dict]:
     """
     Run the async entertainment recommendation service and collect all results.
     """
     recommendations = []
     try:
-        async for recommendation in stream_entertainment_recommendations(user_id, prompt):
+        async for recommendation in stream_entertainment_recommendations(user_id):
             recommendations.append(recommendation)
     except Exception as e:
         logger.error(f"Error in entertainment recommendation stream: {str(e)}")
@@ -136,7 +136,7 @@ def store_recommendations(
     recommendations_data: List[dict]
 ) -> List[Recommendation]:
     """
-    Store recommendations in the database using context manager.
+    Store recommendations in the database using a context manager.
     """
     with get_db() as db:
         stored_recommendations = []
@@ -151,7 +151,6 @@ def store_recommendations(
                 picture_url = None
 
             if 'query' in rec_data and rec_data.get("why_would_you_like_this") != "N/A":
-                print(f"RECOMMENDED PLACE: {rec_data.get('query')}, {rec_data.get('why_would_you_like_this')}, {picture_url}")
                 # Create recommendation
                 recommendation = Recommendation(
                     category=rec_data.get("category", "general"),
@@ -177,7 +176,7 @@ def store_recommendations(
                 db.add(user_recommendation)
                 stored_recommendations.append(recommendation)
         
-        # Commit happens automatically in context manager
+        # Commit happens automatically in the context manager
         return stored_recommendations 
 
 class EntertainmentType(str, Enum):
@@ -191,11 +190,11 @@ def store_entertainment_recommendations(
     recommendations_data: List[dict]
 ) -> List[Recommendation]:
     """
-    Store entertainment recommendations in the database using context manager.
+    Store entertainment recommendations in the database using a context manager.
     """
     with get_db() as db:
         stored_recommendations = []
-        print(f"RECOMMENDATION DATA: {recommendations_data}")
+
         for recommendation_dict in recommendations_data:
             if recommendation_dict.get('result', None):
                 recommendation_dict = recommendation_dict.get('result')

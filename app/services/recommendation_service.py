@@ -213,14 +213,12 @@ async def stream_genie_recommendations(
 
 async def stream_entertainment_recommendations(
     user_id: str,
-    prompt: str,
 ) -> AsyncGenerator[Dict[str, Any], None]:
     """
     Stream movie and TV show recommendations from Genie AI service using Vercel AI SDK protocol.
     
     Args:
         user_id: User ID
-        prompt: User's request for entertainment recommendations
         
     Yields:
         Dict containing structured output (tool results) from the AI response with entertainment recommendations
