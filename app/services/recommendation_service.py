@@ -183,7 +183,6 @@ async def _stream_genie_ai_request(
 async def stream_genie_recommendations(
     user_id: str,
     time_of_day: str,
-    prompt: str,
     neighborhood: Optional[str] = None,
     city: Optional[str] = None,
     country: Optional[str] = None,

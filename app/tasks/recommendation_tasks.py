@@ -122,46 +122,10 @@ def generate_custom_recommendations(
     )
     
     try:
-        user_data = get_user_by_id(user_id)
-        if not user_data:
-            raise ValueError(f"User with id {user_id} not found")
-        
-        # Get random subsets of archetypes and keywords
-        selected_archetypes = get_random_subset(user_data.get('archetypes') or [], 5)
-        selected_keywords = get_random_subset(user_data.get('keywords') or [], 5)
-
-        selected_archetypes = [archetype['name'] for archetype in selected_archetypes]
-        selected_keywords = [keyword['name'] for keyword in selected_keywords]
-        
-        logger.info(
-            "Selected archetypes and keywords",
-            extra={
-                "user_id": user_id,
-                "selected_archetypes": selected_archetypes,
-                "selected_keywords": selected_keywords
-            }
-        )
-        
-        prompt = (
-            f"Show me appropriate places for someone who is visiting my area and "
-            f"possesses these archetypes: {', '.join(selected_archetypes)} and "
-            f"interests: {', '.join(selected_keywords)}"
-        )
-
-        print(prompt)
-
-        logger.info(
-            "Prompt",
-            extra={
-                "prompt": prompt
-            }
-        )
-        
         recommendations = asyncio.run(
             run_async_recommendations(
                 user_id=user_id,
                 time_of_day=time_of_day,
-                prompt=prompt,
                 neighborhood=neighborhood,
                 city=city,
                 country=country,
@@ -180,8 +144,6 @@ def generate_custom_recommendations(
             extra={
                 "user_id": user_id,
                 "recommendation_count": len(stored_recommendations),
-                "used_archetypes": selected_archetypes,
-                "used_keywords": selected_keywords
             }
         )
         
@@ -189,8 +151,6 @@ def generate_custom_recommendations(
             "status": "success",
             "user_id": user_id,
             "recommendation_count": len(stored_recommendations),
-            "used_archetypes": selected_archetypes,
-            "used_keywords": selected_keywords
         }
         
     except Exception as e:

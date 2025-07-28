@@ -88,7 +88,6 @@ def get_db():
 async def run_async_recommendations(
     user_id: str,
     time_of_day: str,
-    prompt: str,
     neighborhood: Optional[str] = None,
     city: Optional[str] = None,
     country: Optional[str] = None,
@@ -104,7 +103,6 @@ async def run_async_recommendations(
         async for recommendation in stream_genie_recommendations(
             user_id=user_id,
             time_of_day=time_of_day,
-            prompt=prompt,
             neighborhood=neighborhood,
             city=city,
             country=country,
