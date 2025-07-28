@@ -620,7 +620,7 @@ async def get_friend_portal_recommendations(
         raise HTTPException(status_code=500, detail=str(e))
 
 def _build_base_query(user_id: str, category_filter: List[str]) -> Select:
-    """Build base query for recommendations with common fields."""
+    """Build a base query for recommendations with common fields."""
     return (
         select(
             UserRecommendation.id.label('user_rec_id'),
@@ -650,7 +650,7 @@ def _build_entertainment_query(user_id: str) -> Select:
     return _build_base_query(user_id, ["movies", "tv_shows"])
 
 def _build_location_query(user_id: str, latitude: Optional[float], longitude: Optional[float], radius_km: float) -> Select:
-    """Build query for location-based recommendations with optional spatial filtering."""
+    """Build a query for location-based recommendations with optional spatial filtering."""
     query = (
         select(
             UserRecommendation.id.label('user_rec_id'),
@@ -752,6 +752,8 @@ async def get_user_recommendations(
     radius_km: Optional[float] = Query(50.0, ge=0.1, le=50.0, description="Search radius in kilometers (max 50km)"),
     time_of_day: Optional[str] = Query(None, description="Filter recommendations by time of day (morning, afternoon, evening, night)"),
     neighborhood: Optional[str] = Query(None, description="Neighborhood name for location-based filtering"),
+    city: Optional[str] = Query(None, description="City name for location-based filtering"),
+    country: Optional[str] = Query(None, description="Country name for location-based filtering"),
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
