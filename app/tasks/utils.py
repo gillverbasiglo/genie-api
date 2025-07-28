@@ -255,7 +255,7 @@ def get_user_by_id(user_id: str) -> Optional[dict]:
         if not user:
             return None
         
-        # Extract the data while session is active
+        # Extract the data while the session is active
         return {
             'id': user.id,
             'archetypes': user.archetypes,
