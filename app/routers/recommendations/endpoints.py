@@ -27,7 +27,6 @@ from app.init_db import get_db
 from app.models import User, UserRecommendation, Recommendation
 from app.services import get_user_by_id, find_common_archetypes, load_cover_images, select_cover_image, get_s3_image_url
 from app.tasks import generate_custom_recommendations, generate_entertainment_recommendations
-from app.tasks.utils import EntertainmentType
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -53,6 +52,8 @@ class RecommendationRequest(BaseModel):
     max_recommendations: int = 5
     user_prompt: Optional[str] = None
     neighborhood: Optional[str] = None
+    city: Optional[str] = None
+    country: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
 
@@ -163,19 +164,15 @@ async def generate_recommendations(
             generate_custom_recommendations.delay(
                 user_id=current_user["uid"],
                 neighborhood=request.neighborhood,
+                city=request.city,
+                country=request.country,
                 latitude=request.latitude,
                 longitude=request.longitude,
                 time_of_day=request.time_of_day,
             )
 
             generate_entertainment_recommendations.delay(
-                user_id=current_user["uid"],
-                entertainment_type=EntertainmentType.MOVIES,
-            )
-
-            generate_entertainment_recommendations.delay(
-                user_id=current_user["uid"],
-                entertainment_type=EntertainmentType.TV_SHOWS,
+                user_id=current_user["uid"]
             )
 
             return Response(status_code=status.HTTP_204_NO_CONTENT)
