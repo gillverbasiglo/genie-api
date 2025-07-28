@@ -177,16 +177,10 @@ def store_recommendations(
                 stored_recommendations.append(recommendation)
         
         # Commit happens automatically in the context manager
-        return stored_recommendations 
-
-class EntertainmentType(str, Enum):
-    """Enum for entertainment content types."""
-    TV_SHOWS = "Best TV shows to watch"
-    MOVIES = "Best movies to watch"
+        return stored_recommendations
 
 def store_entertainment_recommendations(
     user_id: str,
-    entertainment_type: EntertainmentType,
     recommendations_data: List[dict]
 ) -> List[Recommendation]:
     """
@@ -242,7 +236,7 @@ def store_entertainment_recommendations(
                 db.add(user_recommendation)
                 stored_recommendations.append(recommendation)
         
-        # Commit happens automatically in context manager
+        # Commit happens automatically in the context manager
         return stored_recommendations
 
 def get_user_by_id(user_id: str) -> Optional[dict]:

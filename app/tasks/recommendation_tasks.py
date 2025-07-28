@@ -4,8 +4,7 @@ from typing import List
 from celery import Task
 from celery.utils.log import get_task_logger
 from app.tasks.celery_app import celery_app
-from app.tasks.utils import get_db, run_async_recommendations, store_recommendations, get_user_by_id, run_async_entertainment_recommendations, EntertainmentType, store_entertainment_recommendations
-from datetime import datetime
+from app.tasks.utils import get_db, run_async_recommendations, store_recommendations, get_user_by_id, run_async_entertainment_recommendations, store_entertainment_recommendations
 
 logger = get_task_logger(__name__)
 
@@ -209,8 +208,7 @@ def generate_custom_recommendations(
 )
 def generate_entertainment_recommendations(
     self,
-    user_id: str,
-    entertainment_type: EntertainmentType,
+    user_id: str
 ) -> dict:
     """
     Generate movie recommendations for a user.
@@ -223,23 +221,17 @@ def generate_entertainment_recommendations(
     )
 
     try:
-        current_month = datetime.now().strftime("%B")
-        current_year = datetime.now().strftime("%Y")
-
-        prompt = f"{entertainment_type} on {current_month} {current_year}"
-
         recommendations = asyncio.run(
-            run_async_entertainment_recommendations(user_id, prompt)
+            run_async_entertainment_recommendations(user_id)
         )
         
         stored_recommendations = store_entertainment_recommendations(
             user_id=user_id,
             recommendations_data=recommendations,
-            entertainment_type=entertainment_type
         )
 
         logger.info(
-            f"Successfully generated and stored {len(stored_recommendations)} {entertainment_type} recommendations",
+            f"Successfully generated and stored {len(stored_recommendations)} recommendations for movies and tv shows",
         )
     except Exception as e:
         logger.error(
