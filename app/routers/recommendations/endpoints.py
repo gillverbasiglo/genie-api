@@ -828,6 +828,8 @@ async def get_user_recommendations(
             generate_custom_recommendations.delay(
                 user_id=user_id,
                 neighborhood=neighborhood,
+                city=city,
+                country=country,
                 latitude=latitude,
                 longitude=longitude,
                 time_of_day=time_of_day or "afternoon",
