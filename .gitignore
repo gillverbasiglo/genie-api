@@ -10,3 +10,6 @@ wheels/
 .venv
 # Environment file for local development
 .env
+
+# for server scripts and pem files
+server/
