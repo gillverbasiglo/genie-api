@@ -27,7 +27,6 @@ from app.init_db import get_db
 from app.models import User, UserRecommendation, Recommendation
 from app.services import get_user_by_id, find_common_archetypes, load_cover_images, select_cover_image, get_s3_image_url
 from app.tasks import generate_custom_recommendations, generate_entertainment_recommendations
-from app.tasks.utils import EntertainmentType
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -53,6 +52,8 @@ class RecommendationRequest(BaseModel):
     max_recommendations: int = 5
     user_prompt: Optional[str] = None
     neighborhood: Optional[str] = None
+    city: Optional[str] = None
+    country: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
 
@@ -163,19 +164,15 @@ async def generate_recommendations(
             generate_custom_recommendations.delay(
                 user_id=current_user["uid"],
                 neighborhood=request.neighborhood,
+                city=request.city,
+                country=request.country,
                 latitude=request.latitude,
                 longitude=request.longitude,
                 time_of_day=request.time_of_day,
             )
 
             generate_entertainment_recommendations.delay(
-                user_id=current_user["uid"],
-                entertainment_type=EntertainmentType.MOVIES,
-            )
-
-            generate_entertainment_recommendations.delay(
-                user_id=current_user["uid"],
-                entertainment_type=EntertainmentType.TV_SHOWS,
+                user_id=current_user["uid"]
             )
 
             return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -623,7 +620,7 @@ async def get_friend_portal_recommendations(
         raise HTTPException(status_code=500, detail=str(e))
 
 def _build_base_query(user_id: str, category_filter: List[str]) -> Select:
-    """Build base query for recommendations with common fields."""
+    """Build a base query for recommendations with common fields."""
     return (
         select(
             UserRecommendation.id.label('user_rec_id'),
@@ -653,7 +650,7 @@ def _build_entertainment_query(user_id: str) -> Select:
     return _build_base_query(user_id, ["movies", "tv_shows"])
 
 def _build_location_query(user_id: str, latitude: Optional[float], longitude: Optional[float], radius_km: float) -> Select:
-    """Build query for location-based recommendations with optional spatial filtering."""
+    """Build a query for location-based recommendations with optional spatial filtering."""
     query = (
         select(
             UserRecommendation.id.label('user_rec_id'),
@@ -755,6 +752,8 @@ async def get_user_recommendations(
     radius_km: Optional[float] = Query(50.0, ge=0.1, le=50.0, description="Search radius in kilometers (max 50km)"),
     time_of_day: Optional[str] = Query(None, description="Filter recommendations by time of day (morning, afternoon, evening, night)"),
     neighborhood: Optional[str] = Query(None, description="Neighborhood name for location-based filtering"),
+    city: Optional[str] = Query(None, description="City name for location-based filtering"),
+    country: Optional[str] = Query(None, description="Country name for location-based filtering"),
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
@@ -829,6 +828,8 @@ async def get_user_recommendations(
             generate_custom_recommendations.delay(
                 user_id=user_id,
                 neighborhood=neighborhood,
+                city=city,
+                country=country,
                 latitude=latitude,
                 longitude=longitude,
                 time_of_day=time_of_day or "afternoon",

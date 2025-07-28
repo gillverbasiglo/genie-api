@@ -4,9 +4,44 @@ import httpx
 from dataclasses import dataclass
 from pydantic import BaseModel
 from typing import Dict, Any, AsyncGenerator, Optional, List
+from enum import Enum
 
 from app.schemas.users import Archetype, Keyword
 from app.config import settings
+
+def generate_jwt_token_for_user(user_id: str, expires_in_hours: Optional[int] = 24) -> str:
+    """
+    Generate JWT token for user.
+    
+    Args:
+        user_id: The user ID to include in the token
+        expires_in_hours: Token expiration in hours. None for no expiration.
+    
+    Returns:
+        JWT token string
+    """
+    import jwt
+    from datetime import datetime, timedelta, timezone
+    
+    jwt_secret = settings.jwt_api_key.get_secret_value()
+
+    payload = {
+        "userId": user_id
+    }
+    
+    # Add expiration if specified
+    if expires_in_hours is not None:
+        payload["exp"] = datetime.now(timezone.utc) + timedelta(hours=expires_in_hours)
+    
+    # Generate token
+    token = jwt.encode(payload, jwt_secret, algorithm="HS256")
+    
+    return token
+
+class RecommendationType(str, Enum):
+    PLACE = "place"
+    MOVIE = "movie"
+    MIXED = "mixed"
 
 @dataclass
 class Location:
@@ -34,13 +69,22 @@ class PlacesGenieAIRequest(GenieAIRequest):
     coordinates: Dict[str, Any]
     neighborhood: str
 
+class GenieAIPortalRecommendationRequest(BaseModel):
+    recommendationType: RecommendationType
+    promptCount: int = 1
+    parallelLimit: int = 1
+    neighborhood: str
+    city: str
+    country: str
+    coordinates: Dict[str, float]
+
 class StreamPart(BaseModel):
     type: str
     content: Dict[str, Any]
 
 async def get_location_from_ip(ip_address: str) -> Optional[Location]:
     """
-    Get location information from IP address using ipapi.co service.
+    Get location information from the IP address using ipapi.co service.
     
     Args:
         ip_address: The IP address to look up
@@ -85,10 +129,63 @@ async def parse_stream_part(line: str) -> Optional[StreamPart]:
     except (ValueError, json.JSONDecodeError):
         return None
 
+
+async def _stream_genie_ai_request(
+    request_data: GenieAIPortalRecommendationRequest,
+    user_id: str,
+    url: Optional[str] = None
+) -> AsyncGenerator[Dict[str, Any], None]:
+    """
+    Generic function to handle HTTP streaming requests to Genie AI service.
+    
+    Args:
+        request_data: The request payload to send
+        user_id: User ID for JWT token generation
+        url: Optional custom URL, defaults to settings.GENIE_AI_URL
+        
+    Yields:
+        Dict containing structured output (tool results) from the AI response
+        
+    Raises:
+        httpx.HTTPError: If the request fails
+    """
+    api_url = url or settings.GENIE_AI_URL
+    bearer_token = generate_jwt_token_for_user(user_id)
+    
+    headers = {
+        "Accept": "text/event-stream",
+        "Content-Type": "application/json",
+        "x-vercel-ai-data-stream": "v1",
+        "Authorization": f"Bearer {bearer_token}"
+    }
+    
+    async with httpx.AsyncClient() as client:
+        try:
+            async with client.stream(
+                "POST",
+                api_url,
+                json=request_data.model_dump(),
+                headers=headers,
+                timeout=30.0
+            ) as response:
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    if part := await parse_stream_part(line):
+                        if part.type == "a":  # Tool result part
+                            if "result" in part.content and part.content["result"] is not None and "searches" not in part.content["result"]:
+                                yield part.content["result"]
+                        elif part.type == "3":  # Error part
+                            raise Exception(f"AI Service Error: {part.content}")
+        except httpx.HTTPError as e:
+            raise e
+
+
 async def stream_genie_recommendations(
+    user_id: str,
     time_of_day: str,
-    prompt: str,
     neighborhood: Optional[str] = None,
+    city: Optional[str] = None,
+    country: Optional[str] = None,
     latitude: Optional[float] = None,
     longitude: Optional[float] = None,
     ip_address: Optional[str] = None,
@@ -105,68 +202,39 @@ async def stream_genie_recommendations(
     Raises:
         httpx.HTTPError: If the request fails
     """
-    GENIE_AI_URL = settings.GENIE_AI_URL
-    
-    
     if ip_address:
         # Get location information from IP
         location = await get_location_from_ip(ip_address)
-        # Create populated neighborhood, latitude, and longitude with location information
+        # Create a populated neighborhood, latitude, and longitude with location information
         neighborhood = location.state
+        city = location.city
+        country = location.country
         latitude = location.latitude
         longitude = location.longitude
     
-    request_data = PlacesGenieAIRequest(
-        model="genie-gemini",
-        group="web",
+    request_data = GenieAIPortalRecommendationRequest(
+        recommendationType=RecommendationType.PLACE,
         neighborhood=neighborhood,
+        city=city,
+        country=country,
         coordinates={
-            "lat": latitude,
-            "lon": longitude
-        },
-        messages=[
-            Message(role="user", parts=[MessagePart(type="text", text=prompt)])
-        ]
+            "latitude": latitude,
+            "longitude": longitude
+        }
     )
-    
-    headers = {
-        "Accept": "text/event-stream",
-        "Content-Type": "application/json",
-        "x-vercel-ai-data-stream": "v1"  # Required for Vercel AI SDK protocol
-    }
-    
-    async with httpx.AsyncClient() as client:
-        try:
-            async with client.stream(
-                "POST",
-                GENIE_AI_URL,
-                json=request_data.model_dump(),
-                headers=headers,
-                timeout=30.0
-            ) as response:
-                response.raise_for_status()
-                async for line in response.aiter_lines():
-                    if part := await parse_stream_part(line):
-                        # Handle different types of stream parts
-                        if part.type == "a":  # Tool result part
-                            # Extract the structured output from the tool result
-                            if "result" in part.content and part.content["result"] is not None and "structuredResults" in part.content["result"]:
-                                yield part.content["result"]
-                        elif part.type == "3":  # Error part
-                            raise Exception(f"AI Service Error: {part.content}")
-                        # Add other part types as needed (text, reasoning, etc.)
-        except httpx.HTTPError as e:
-            # Log the error here if you have a logging system
-            raise e
+
+    # Use the generic stream handler
+    async for result in _stream_genie_ai_request(request_data, user_id):
+        yield result
 
 async def stream_entertainment_recommendations(
-    prompt: str,
+    user_id: str,
 ) -> AsyncGenerator[Dict[str, Any], None]:
     """
     Stream movie and TV show recommendations from Genie AI service using Vercel AI SDK protocol.
     
     Args:
-        prompt: User's request for entertainment recommendations
+        user_id: User ID
         
     Yields:
         Dict containing structured output (tool results) from the AI response with entertainment recommendations
@@ -174,38 +242,14 @@ async def stream_entertainment_recommendations(
     Raises:
         httpx.HTTPError: If the request fails
     """
-    GENIE_AI_URL = settings.GENIE_AI_URL
-    
-    request_data = GenieAIRequest(
-        model="genie-gemini",
-        group="web", 
-        messages=[
-            Message(role="user", parts=[MessagePart(type="text", text=prompt)])
-        ]
+    request_data = GenieAIPortalRecommendationRequest(
+        recommendationType=RecommendationType.MOVIE,
+        neighborhood="",
+        city="",
+        country="",
+        coordinates={}
     )
-    
-    headers = {
-        "Accept": "text/event-stream",
-        "Content-Type": "application/json",
-        "x-vercel-ai-data-stream": "v1"
-    }
-    
-    async with httpx.AsyncClient() as client:
-        try:
-            async with client.stream(
-                "POST",
-                GENIE_AI_URL,
-                json=request_data.model_dump(),
-                headers=headers,
-                timeout=30.0
-            ) as response:
-                response.raise_for_status()
-                async for line in response.aiter_lines():
-                    if part := await parse_stream_part(line):
-                        if part.type == "a":  # Tool result part
-                            if "result" in part.content and part.content["result"] is not None and "result" in part.content["result"]:
-                                yield part.content["result"]
-                        elif part.type == "3":  # Error part
-                            raise Exception(f"AI Service Error: {part.content}")
-        except httpx.HTTPError as e:
-            raise e
+
+    # Use the generic stream handler
+    async for result in _stream_genie_ai_request(request_data, user_id):
+        yield result

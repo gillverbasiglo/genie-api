@@ -4,8 +4,7 @@ from typing import List
 from celery import Task
 from celery.utils.log import get_task_logger
 from app.tasks.celery_app import celery_app
-from app.tasks.utils import get_db, run_async_recommendations, store_recommendations, get_user_by_id, run_async_entertainment_recommendations, EntertainmentType, store_entertainment_recommendations
-from datetime import datetime
+from app.tasks.utils import get_db, run_async_recommendations, store_recommendations, get_user_by_id, run_async_entertainment_recommendations, store_entertainment_recommendations
 
 logger = get_task_logger(__name__)
 
@@ -39,7 +38,7 @@ def get_random_subset(items: List[str], count: int = 5) -> List[str]:
 )
 def generate_user_recommendations(
     self,
-    user_id: int,
+    user_id: str,
     ip_address: str,
     time_of_day: str
 ) -> dict:
@@ -97,9 +96,11 @@ def generate_user_recommendations(
 )
 def generate_custom_recommendations(
     self,
-    user_id: int,
+    user_id: str,
     time_of_day: str,
     neighborhood: str,
+    city: str,
+    country: str,
     latitude: float,
     longitude: float,
 ) -> dict:
@@ -113,50 +114,21 @@ def generate_custom_recommendations(
             "user_id": user_id,
             "time_of_day": time_of_day,
             "neighborhood": neighborhood,
+            "city": city,
+            "country": country,
             "latitude": latitude,
             "longitude": longitude,
         }
     )
     
     try:
-        user = get_user_by_id(user_id)
-        
-        # Get random subsets of archetypes and keywords
-        selected_archetypes = get_random_subset(user.archetypes or [], 5)
-        selected_keywords = get_random_subset(user.keywords or [], 5)
-
-        selected_archetypes = [archetype['name'] for archetype in selected_archetypes]
-        selected_keywords = [keyword['name'] for keyword in selected_keywords]
-        
-        logger.info(
-            "Selected archetypes and keywords",
-            extra={
-                "user_id": user_id,
-                "selected_archetypes": selected_archetypes,
-                "selected_keywords": selected_keywords
-            }
-        )
-        
-        prompt = (
-            f"Show me appropriate places for someone who is visiting my area and "
-            f"possesses these archetypes: {', '.join(selected_archetypes)} and "
-            f"interests: {', '.join(selected_keywords)}"
-        )
-
-        print(prompt)
-
-        logger.info(
-            "Prompt",
-            extra={
-                "prompt": prompt
-            }
-        )
-        
         recommendations = asyncio.run(
             run_async_recommendations(
+                user_id=user_id,
                 time_of_day=time_of_day,
-                prompt=prompt,
                 neighborhood=neighborhood,
+                city=city,
+                country=country,
                 latitude=latitude,
                 longitude=longitude
             )
@@ -172,8 +144,6 @@ def generate_custom_recommendations(
             extra={
                 "user_id": user_id,
                 "recommendation_count": len(stored_recommendations),
-                "used_archetypes": selected_archetypes,
-                "used_keywords": selected_keywords
             }
         )
         
@@ -181,8 +151,6 @@ def generate_custom_recommendations(
             "status": "success",
             "user_id": user_id,
             "recommendation_count": len(stored_recommendations),
-            "used_archetypes": selected_archetypes,
-            "used_keywords": selected_keywords
         }
         
     except Exception as e:
@@ -200,8 +168,7 @@ def generate_custom_recommendations(
 )
 def generate_entertainment_recommendations(
     self,
-    user_id: int,
-    entertainment_type: EntertainmentType,
+    user_id: str
 ) -> dict:
     """
     Generate movie recommendations for a user.
@@ -214,24 +181,17 @@ def generate_entertainment_recommendations(
     )
 
     try:
-        user = get_user_by_id(user_id)
-        current_month = datetime.now().strftime("%B")
-        current_year = datetime.now().strftime("%Y")
-
-        prompt = f"{entertainment_type} on {current_month} {current_year}"
-
         recommendations = asyncio.run(
-            run_async_entertainment_recommendations(prompt)
+            run_async_entertainment_recommendations(user_id)
         )
         
         stored_recommendations = store_entertainment_recommendations(
             user_id=user_id,
             recommendations_data=recommendations,
-            entertainment_type=entertainment_type
         )
 
         logger.info(
-            f"Successfully generated and stored {len(stored_recommendations)} {entertainment_type} recommendations",
+            f"Successfully generated and stored {len(stored_recommendations)} recommendations for movies and tv shows",
         )
     except Exception as e:
         logger.error(

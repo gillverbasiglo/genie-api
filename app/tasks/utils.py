@@ -18,7 +18,7 @@ _engine = None
 _SessionLocal = None
 
 def _get_engine():
-    """Get or create database engine with credential refresh support."""
+    """Get or create a database engine with credential refresh support."""
     global _engine, _SessionLocal
     max_retries = 2
     retry_count = 0
@@ -27,7 +27,7 @@ def _get_engine():
         try:
             SQLALCHEMY_DATABASE_URL = f"postgresql+psycopg://{settings.db_username}:{settings.db_password.get_secret_value()}@{settings.host}:{settings.port}/{settings.database}"
             
-            # Create new engine if it doesn't exist or credentials might have changed
+            # Create a new engine if it doesn't exist or credentials might have changed
             if _engine is None:
                 _engine = create_engine(
                     SQLALCHEMY_DATABASE_URL,
@@ -70,7 +70,7 @@ def _get_engine():
 
 @contextmanager
 def get_db():
-    """Get database session context manager with proper lifecycle management."""
+    """Get a database session context manager with proper lifecycle management."""
     engine, SessionLocal = _get_engine()
     session = SessionLocal()
     try:
@@ -86,9 +86,11 @@ def get_db():
         logger.debug("Database session closed")
 
 async def run_async_recommendations(
+    user_id: str,
     time_of_day: str,
-    prompt: str,
     neighborhood: Optional[str] = None,
+    city: Optional[str] = None,
+    country: Optional[str] = None,
     latitude: Optional[float] = None,
     longitude: Optional[float] = None,
     ip_address: Optional[str] = None,
@@ -99,9 +101,11 @@ async def run_async_recommendations(
     recommendations = []
     try:
         async for recommendation in stream_genie_recommendations(
+            user_id=user_id,
             time_of_day=time_of_day,
-            prompt=prompt,
             neighborhood=neighborhood,
+            city=city,
+            country=country,
             latitude=latitude,
             longitude=longitude,
             ip_address=ip_address,
@@ -112,13 +116,13 @@ async def run_async_recommendations(
         raise
     return recommendations
 
-async def run_async_entertainment_recommendations(prompt: str) -> List[dict]:
+async def run_async_entertainment_recommendations(user_id: str) -> List[dict]:
     """
     Run the async entertainment recommendation service and collect all results.
     """
     recommendations = []
     try:
-        async for recommendation in stream_entertainment_recommendations(prompt):
+        async for recommendation in stream_entertainment_recommendations(user_id):
             recommendations.append(recommendation)
     except Exception as e:
         logger.error(f"Error in entertainment recommendation stream: {str(e)}")
@@ -126,31 +130,30 @@ async def run_async_entertainment_recommendations(prompt: str) -> List[dict]:
     return recommendations
 
 def store_recommendations(
-    user_id: int,
+    user_id: str,
     recommendations_data: List[dict]
 ) -> List[Recommendation]:
     """
-    Store recommendations in the database using context manager.
+    Store recommendations in the database using a context manager.
     """
     with get_db() as db:
         stored_recommendations = []
-        recommendations_result = recommendations_data[0]
-        recommendations = recommendations_result["structuredResults"]
+        recommendations = recommendations_data
         
         for rec_data in recommendations:
-            places_data = rec_data.get("places", [])
+            places_data = rec_data.get("results", [])
             place_data = places_data[0] if places_data else {}
             if 'photos' in place_data:
-                picture_url = place_data['photos'][0]['medium']
+                picture_url = place_data['photos'][0]['large']
             else:
                 picture_url = None
-            
-            if 'name' in place_data and rec_data.get("llmDescription") != "N/A":
+
+            if 'query' in rec_data and rec_data.get("why_would_you_like_this") != "N/A":
                 # Create recommendation
                 recommendation = Recommendation(
-                    category=place_data.get("category", "general"),
-                    prompt=rec_data.get("llmDescription", ""),
-                    search_query=rec_data.get("name"),
+                    category=rec_data.get("category", "general"),
+                    prompt=rec_data.get("why_would_you_like_this", ""),
+                    search_query=place_data.get("name"),
                     place_details=place_data,
                     archetypes=rec_data.get("usedArchetypes", []),
                     keywords=rec_data.get("usedKeywords", []),
@@ -171,37 +174,32 @@ def store_recommendations(
                 db.add(user_recommendation)
                 stored_recommendations.append(recommendation)
         
-        # Commit happens automatically in context manager
-        return stored_recommendations 
-
-class EntertainmentType(str, Enum):
-    """Enum for entertainment content types."""
-    TV_SHOWS = "Best TV shows to watch"
-    MOVIES = "Best movies to watch"
+        # Commit happens automatically in the context manager
+        return stored_recommendations
 
 def store_entertainment_recommendations(
-    user_id: int,
-    entertainment_type: EntertainmentType,
+    user_id: str,
     recommendations_data: List[dict]
 ) -> List[Recommendation]:
     """
-    Store entertainment recommendations in the database using context manager.
+    Store entertainment recommendations in the database using a context manager.
     """
     with get_db() as db:
         stored_recommendations = []
-        
-        for rec_data in recommendations_data:
-            recommendation_dict = rec_data.get("result")
-            if recommendation_dict:
-                if entertainment_type == EntertainmentType.TV_SHOWS:
+
+        for recommendation_dict in recommendations_data:
+            if recommendation_dict.get('result', None):
+                recommendation_dict = recommendation_dict.get('result')
+                media_type = recommendation_dict.get("media_type")
+                if media_type == "tv":
                     category = "tv_shows"
-                    picture_url = recommendation_dict.get("backdrop_path")
+                    picture_url = recommendation_dict.get("backdrop_path") or recommendation_dict.get("poster_path")
                     name = (
                         recommendation_dict.get("original_name") or 
                         recommendation_dict.get("title") or
                         recommendation_dict.get("name")
                     )
-                elif entertainment_type == EntertainmentType.MOVIES:
+                elif media_type == "movie":
                     category = "movies"
                     picture_url = recommendation_dict.get("poster_path")
                     name = (
@@ -213,7 +211,7 @@ def store_entertainment_recommendations(
                 # Create recommendation
                 recommendation = Recommendation(
                     category=category,
-                    prompt=recommendation_dict.get("overview", ""),
+                    prompt=recommendation_dict.get("why_would_you_like_this", ""),
                     search_query=name,
                     place_details=None,
                     archetypes=[recommendation_dict.get("usedArchetypes", [])],
@@ -236,13 +234,22 @@ def store_entertainment_recommendations(
                 db.add(user_recommendation)
                 stored_recommendations.append(recommendation)
         
-        # Commit happens automatically in context manager
+        # Commit happens automatically in the context manager
         return stored_recommendations
 
-def get_user_by_id(user_id: int) -> Optional[User]:
+def get_user_by_id(user_id: str) -> Optional[dict]:
     """
-    Get a user by their unique identifier using context manager.
+    Get user data needed for recommendations to avoid DetachedInstanceError.
+    Returns a dict with archetypes and keywords instead of a User object.
     """
     with get_db() as db:
-        user = db.query(User).get(user_id)
-        return user
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            return None
+        
+        # Extract the data while the session is active
+        return {
+            'id': user.id,
+            'archetypes': user.archetypes,
+            'keywords': user.keywords
+        }
