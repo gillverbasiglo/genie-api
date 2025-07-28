@@ -9,6 +9,35 @@ from enum import Enum
 from app.schemas.users import Archetype, Keyword
 from app.config import settings
 
+def generate_jwt_token_for_user(user_id: str, expires_in_hours: Optional[int] = 24) -> str:
+    """
+    Generate JWT token for user.
+    
+    Args:
+        user_id: The user ID to include in the token
+        expires_in_hours: Token expiration in hours. None for no expiration.
+    
+    Returns:
+        JWT token string
+    """
+    import jwt
+    from datetime import datetime, timedelta, timezone
+    
+    jwt_secret = settings.jwt_api_key.get_secret_value()
+
+    payload = {
+        "userId": user_id
+    }
+    
+    # Add expiration if specified
+    if expires_in_hours is not None:
+        payload["exp"] = datetime.now(timezone.utc) + timedelta(hours=expires_in_hours)
+    
+    # Generate token
+    token = jwt.encode(payload, jwt_secret, algorithm="HS256")
+    
+    return token
+
 class RecommendationType(str, Enum):
     PLACE = "place"
     MOVIE = "movie"
@@ -55,7 +84,7 @@ class StreamPart(BaseModel):
 
 async def get_location_from_ip(ip_address: str) -> Optional[Location]:
     """
-    Get location information from IP address using ipapi.co service.
+    Get location information from the IP address using ipapi.co service.
     
     Args:
         ip_address: The IP address to look up
@@ -101,34 +130,54 @@ async def parse_stream_part(line: str) -> Optional[StreamPart]:
         return None
 
 
-def generate_jwt_token_for_user(user_id: str, expires_in_hours: Optional[int] = 24) -> str:
+async def _stream_genie_ai_request(
+    request_data: GenieAIPortalRecommendationRequest,
+    user_id: str,
+    url: Optional[str] = None
+) -> AsyncGenerator[Dict[str, Any], None]:
     """
-    Generate JWT token for user.
-
+    Generic function to handle HTTP streaming requests to Genie AI service.
+    
     Args:
-        user_id: The user ID to include in the token
-        expires_in_hours: Token expiration in hours. None for no expiration.
-
-    Returns:
-        JWT token string
+        request_data: The request payload to send
+        user_id: User ID for JWT token generation
+        url: Optional custom URL, defaults to settings.GENIE_AI_URL
+        
+    Yields:
+        Dict containing structured output (tool results) from the AI response
+        
+    Raises:
+        httpx.HTTPError: If the request fails
     """
-    import jwt
-    from datetime import datetime, timedelta, timezone
-
-    jwt_secret = settings.jwt_api_key.get_secret_value()
-
-    payload = {
-        "userId": user_id
+    api_url = url or settings.GENIE_AI_URL
+    bearer_token = generate_jwt_token_for_user(user_id)
+    
+    headers = {
+        "Accept": "text/event-stream",
+        "Content-Type": "application/json",
+        "x-vercel-ai-data-stream": "v1",
+        "Authorization": f"Bearer {bearer_token}"
     }
-
-    # Add expiration if specified
-    if expires_in_hours is not None:
-        payload["exp"] = datetime.now(timezone.utc) + timedelta(hours=expires_in_hours)
-
-    # Generate token
-    token = jwt.encode(payload, jwt_secret, algorithm="HS256")
-
-    return token
+    
+    async with httpx.AsyncClient() as client:
+        try:
+            async with client.stream(
+                "POST",
+                api_url,
+                json=request_data.model_dump(),
+                headers=headers,
+                timeout=30.0
+            ) as response:
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    if part := await parse_stream_part(line):
+                        if part.type == "a":  # Tool result part
+                            if "result" in part.content and part.content["result"] is not None and "searches" not in part.content["result"]:
+                                yield part.content["result"]
+                        elif part.type == "3":  # Error part
+                            raise Exception(f"AI Service Error: {part.content}")
+        except httpx.HTTPError as e:
+            raise e
 
 
 async def stream_genie_recommendations(
@@ -154,9 +203,6 @@ async def stream_genie_recommendations(
     Raises:
         httpx.HTTPError: If the request fails
     """
-    GENIE_AI_URL = settings.GENIE_AI_URL
-    
-    
     if ip_address:
         # Get location information from IP
         location = await get_location_from_ip(ip_address)
@@ -178,38 +224,9 @@ async def stream_genie_recommendations(
         }
     )
 
-    bearer_token = generate_jwt_token_for_user(user_id)
-    
-    headers = {
-        "Accept": "text/event-stream",
-        "Content-Type": "application/json",
-        "x-vercel-ai-data-stream": "v1",  # Required for Vercel AI SDK protocol
-        "Authorization": f"Bearer {bearer_token}"
-    }
-    
-    async with httpx.AsyncClient() as client:
-        try:
-            async with client.stream(
-                "POST",
-                GENIE_AI_URL,
-                json=request_data.model_dump(),
-                headers=headers,
-                timeout=30.0
-            ) as response:
-                response.raise_for_status()
-                async for line in response.aiter_lines():
-                    if part := await parse_stream_part(line):
-                        # Handle different types of stream parts
-                        if part.type == "a":  # Tool result part
-                            # Extract the structured output from the tool result
-                            if "result" in part.content and part.content["result"] is not None and "searches" not in part.content["result"]:
-                                yield part.content["result"]
-                        elif part.type == "3":  # Error part
-                            raise Exception(f"AI Service Error: {part.content}")
-                        # Add other part types as needed (text, reasoning, etc.)
-        except httpx.HTTPError as e:
-            # Log the error here if you have a logging system
-            raise e
+    # Use the generic stream handler
+    async for result in _stream_genie_ai_request(request_data, user_id):
+        yield result
 
 async def stream_entertainment_recommendations(
     user_id: str,
@@ -226,8 +243,6 @@ async def stream_entertainment_recommendations(
     Raises:
         httpx.HTTPError: If the request fails
     """
-    GENIE_AI_URL = settings.GENIE_AI_URL
-    
     request_data = GenieAIPortalRecommendationRequest(
         recommendationType=RecommendationType.MOVIE,
         neighborhood="",
@@ -236,31 +251,6 @@ async def stream_entertainment_recommendations(
         coordinates={}
     )
 
-    bearer_token = generate_jwt_token_for_user(user_id)
-    
-    headers = {
-        "Accept": "text/event-stream",
-        "Content-Type": "application/json",
-        "x-vercel-ai-data-stream": "v1",
-        "Authorization": f"Bearer {bearer_token}"
-    }
-    
-    async with httpx.AsyncClient() as client:
-        try:
-            async with client.stream(
-                "POST",
-                GENIE_AI_URL,
-                json=request_data.model_dump(),
-                headers=headers,
-                timeout=30.0
-            ) as response:
-                response.raise_for_status()
-                async for line in response.aiter_lines():
-                    if part := await parse_stream_part(line):
-                        if part.type == "a":  # Tool result part
-                            if "result" in part.content and part.content["result"] is not None and "searches" not in part.content["result"]:
-                                yield part.content["result"]
-                        elif part.type == "3":  # Error part
-                            raise Exception(f"AI Service Error: {part.content}")
-        except httpx.HTTPError as e:
-            raise e
+    # Use the generic stream handler
+    async for result in _stream_genie_ai_request(request_data, user_id):
+        yield result
