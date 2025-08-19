@@ -295,13 +295,13 @@ class Mem0Manager:
                 metadata=metadata
             )
 
-            logger.info(f"✅ Successfully stored user interaction for user '{user_id}'")
+            logger.info(f"Successfully stored user interaction for user '{user_id}'")
             logger.info(f"   Mem0 Result: {result}")
 
             return result
 
         except Exception as e:
-            logger.exception(f"❌ Error storing user interaction for user '{user_id}': {e}")
+            logger.exception(f"Error storing user interaction for user '{user_id}': {e}")
             return None
 
     def _format_location_data(self, location_data: dict) -> str:

@@ -59,7 +59,7 @@ async def store_user_interaction(
         HTTPException: 500 if there's an error during storage
     """
     try:
-        logger.info(f"📤 Storing user interaction for user {user_id}")
+        logger.info(f"Storing user interaction for user {user_id}")
 
         # Store the interaction using Mem0Manager
         result = await mem0_manager.store_user_interaction(
@@ -73,7 +73,7 @@ async def store_user_interaction(
         )
 
         if result:
-            logger.info(f"✅ Successfully stored user interaction for user {user_id}")
+            logger.info(f"Successfully stored user interaction for user {user_id}")
             return {
                 "status": "success",
                 "user_id": user_id,
@@ -81,11 +81,11 @@ async def store_user_interaction(
                 "message": "User interaction stored successfully"
             }
         else:
-            logger.error(f"❌ Failed to store user interaction for user {user_id}")
+            logger.error(f"Failed to store user interaction for user {user_id}")
             raise HTTPException(status_code=500, detail="Failed to store user interaction")
 
     except Exception as e:
-        logger.exception(f"❌ Error storing user interaction for user {user_id}: {e}")
+        logger.exception(f"Error storing user interaction for user {user_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Error storing user interaction: {e}")
 
 @router.post("/{user_id}/generate_memories")
