@@ -25,7 +25,6 @@ class UserInteractionData(BaseModel):
     """Data structure for storing user interactions"""
     query: str = Field(description="User's search query")
     location_data: Optional[Dict[str, Any]] = Field(default=None, description="Location information")
-    llm_response: Optional[str] = Field(default=None, description="LLM response to the query")
     model_used: Optional[str] = Field(default=None, description="LLM model used")
     session_id: Optional[str] = Field(default=None, description="Session identifier")
     additional_metadata: Optional[Dict[str, Any]] = Field(default=None, description="Additional metadata")
@@ -40,33 +39,13 @@ async def store_user_interaction(
     user_id: str, 
     interaction_data: UserInteractionData
 ):
-    """
-    Store a user interaction in Mem0 for future personalization.
-    
-    This endpoint stores user queries, location data, and LLM responses
-    to build a memory profile for personalized experiences.
-    
-    Args:
-        user_id (str): The unique identifier of the user
-        interaction_data (UserInteractionData): The interaction data to store
-        
-    Returns:
-        dict: A response containing:
-            - status (str): "success" if interaction was stored successfully
-            - memory_id (str): ID of the stored memory
-            
-    Raises:
-        HTTPException: 500 if there's an error during storage
-    """
     try:
         logger.info(f"Storing user interaction for user {user_id}")
 
-        # Store the interaction using Mem0Manager
         result = await mem0_manager.store_user_interaction(
             user_id=user_id,
             query=interaction_data.query,
             location_data=interaction_data.location_data,
-            llm_response=interaction_data.llm_response,
             model_used=interaction_data.model_used,
             session_id=interaction_data.session_id,
             additional_metadata=interaction_data.additional_metadata
@@ -87,6 +66,7 @@ async def store_user_interaction(
     except Exception as e:
         logger.exception(f"Error storing user interaction for user {user_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Error storing user interaction: {e}")
+    
 
 @router.post("/{user_id}/generate_memories")
 async def generate_memories(user_id: str, db: AsyncSession = Depends(get_db)):
