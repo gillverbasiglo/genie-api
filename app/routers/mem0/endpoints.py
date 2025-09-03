@@ -13,15 +13,60 @@ from app.core.mem0.memory_categories import MEM0_CATEGORIES
 from app.init_db import get_db
 from app.models.user import User
 from app.services.mem0_service import MemoryService
+from pydantic import BaseModel
+from typing import Dict, Any, Optional
 
 
 # Configure logging for this module
 logger = logging.getLogger(__name__)
 
+# Schema for storing user interactions
+class UserInteractionData(BaseModel):
+    """Data structure for storing user interactions"""
+    query: str = Field(description="User's search query")
+    location_data: Optional[Dict[str, Any]] = Field(default=None, description="Location information")
+    model_used: Optional[str] = Field(default=None, description="LLM model used")
+    session_id: Optional[str] = Field(default=None, description="Session identifier")
+    additional_metadata: Optional[Dict[str, Any]] = Field(default=None, description="Additional metadata")
+
 # Initialize router with prefix and tags for API documentation
 router = APIRouter(prefix="/memories", tags=["memories"])
 
 mem0_manager = Mem0Manager()
+
+@router.post("/{user_id}/store_interaction")
+async def store_user_interaction(
+    user_id: str, 
+    interaction_data: UserInteractionData
+):
+    try:
+        logger.info(f"Storing user interaction for user {user_id}")
+
+        result = await mem0_manager.store_user_interaction(
+            user_id=user_id,
+            query=interaction_data.query,
+            location_data=interaction_data.location_data,
+            model_used=interaction_data.model_used,
+            session_id=interaction_data.session_id,
+            additional_metadata=interaction_data.additional_metadata
+        )
+
+        if result:
+            logger.info(f"Successfully stored user interaction for user {user_id}")
+            return {
+                "status": "success",
+                "user_id": user_id,
+                "memory_id": result.get("id", "unknown"),
+                "message": "User interaction stored successfully"
+            }
+        else:
+            logger.error(f"Failed to store user interaction for user {user_id}")
+            raise HTTPException(status_code=500, detail="Failed to store user interaction")
+
+    except Exception as e:
+        logger.exception(f"Error storing user interaction for user {user_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Error storing user interaction: {e}")
+    
 
 @router.post("/{user_id}/generate_memories")
 async def generate_memories(user_id: str, db: AsyncSession = Depends(get_db)):

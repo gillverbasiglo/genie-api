@@ -1,9 +1,7 @@
 import logging
-import os
 from datetime import datetime, timezone
-import uuid
 from mem0 import AsyncMemoryClient
-from typing import List, Optional
+from typing import Optional
 from app.config import settings
 from app.core.mem0.mem0_helpers import build_metadata
 
@@ -225,6 +223,46 @@ class Mem0Manager:
         except Exception as e:
             logger.exception(f"❌ Error getting memories: {e}")
             return []
+        
+    async def store_user_interaction(
+        self,
+        user_id: str,
+        query: str,
+        location_data: dict = None,
+        model_used: str = None,
+        session_id: str = None,
+        additional_metadata: dict = None
+    ) -> Optional[dict]:
+        try:
+            content_parts = []
+            content_parts.append(f"User Query: {query}")
+            content = "\n\n".join(content_parts)
+
+            metadata = {
+                "category": "user_interactions",
+                "query": query[:100],
+                "model_used": model_used,
+                "location_data": location_data,
+                "session_id": session_id,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "metadata": additional_metadata or {}
+            }
+
+            result = await self.client.add(
+                messages=[{"role": "user", "content": content}],
+                user_id=user_id,
+                metadata=metadata
+            )
+
+            logger.info(f"Successfully stored user interaction for user '{user_id}'")
+            logger.info(f"Mem0 Result: {result}")
+
+            return result
+
+        except Exception as e:
+            logger.exception(f"Error storing user interaction for user '{user_id}': {e}")
+            return None
+    
 
 # Create a singleton instance of Mem0Manager
 mem0_manager = Mem0Manager()
